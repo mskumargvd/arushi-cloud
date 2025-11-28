@@ -1,10 +1,15 @@
-import React, { useEffect, useState } from 'react';
-import { io } from 'socket.io-client';
+import { useState, useEffect } from 'react';
+import io from 'socket.io-client';
+import { Terminal, Activity, Server, Shield, Cpu, HardDrive, Clock, ChevronRight, Command } from 'lucide-react';
+import HistoricalChart from './components/HistoricalChart';
+import CommandCenter from './components/CommandCenter';
+
+const API_KEY = 'my_super_secret_key_12345'; // Must match server to env/config
 
 const socket = io('http://localhost:3000', {
   autoConnect: false,
   auth: {
-    token: 'my_super_secret_key_12345' // TODO: Move to env/config
+    token: API_KEY // Using API_KEY here
   }
 });
 
@@ -95,11 +100,16 @@ function App() {
               <li
                 key={agent.id}
                 onClick={() => setSelectedAgent(agent)}
-                className={`p-3 rounded cursor-pointer transition-colors ${selectedAgent?.id === agent.id ? 'bg-blue-50 border-blue-200 border' : 'hover:bg-gray-50 border border-transparent'}`}
+                className={`p-3 rounded cursor-pointer transition-colors border ${selectedAgent?.id === agent.id ? 'bg-blue-50 border-blue-200' : 'hover:bg-gray-50 border-transparent'} ${agent.status === 'offline' ? 'opacity-60 grayscale' : ''}`}
               >
-                <div className="font-medium text-gray-900">Agent {agent.id.substring(0, 8)}...</div>
+                <div className="flex justify-between items-center">
+                  <div className="font-medium text-gray-900">Agent {agent.id.substring(0, 8)}...</div>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${agent.status === 'offline' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                    {agent.status === 'offline' ? 'Offline' : 'Online'}
+                  </span>
+                </div>
                 <div className="text-sm text-gray-500">{agent.platform}</div>
-                {agent.stats && (
+                {agent.stats && agent.status !== 'offline' && (
                   <div className="text-xs text-gray-400 mt-1">
                     CPU: {agent.stats.cpu}% | RAM: {agent.stats.ram}%
                   </div>

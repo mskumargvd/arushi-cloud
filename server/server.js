@@ -69,7 +69,8 @@ io.on('connection', (socket) => {
     // Identify if it's an agent or dashboard
     socket.on('register_agent', async (data) => {
         console.log('Agent registered:', data.id);
-        agents.set(data.id, { socketId: socket.id, ...data });
+        // Set status to online
+        agents.set(data.id, { socketId: socket.id, status: 'online', ...data });
         socket.join('agents');
         socket.data.type = 'agent';
         socket.data.agentId = data.id;
@@ -183,14 +184,32 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         if (socket.data.type === 'agent') {
-            console.log('Agent disconnected:', socket.data.agentId);
-            agents.delete(socket.data.agentId);
-            io.to('dashboard').emit('agent_disconnected', { id: socket.data.agentId });
+            const agentId = socket.data.agentId;
+            console.log('Agent disconnected:', agentId);
+
+            // Mark as offline instead of deleting
+            if (agents.has(agentId)) {
+                const agent = agents.get(agentId);
+                agent.status = 'offline';
+                agent.socketId = null; // No longer reachable
+                agents.set(agentId, agent);
+
+                // Notify dashboard
+                io.to('dashboard').emit('agent_update', { id: agentId, status: 'offline' });
+
+                // Trigger Alert
+                sendAlert(agentId, 'offline');
+            }
         } else {
             console.log('Client disconnected:', socket.id);
         }
     });
 });
+
+function sendAlert(agentId, type) {
+    console.log(`[ALERT] Agent ${agentId} is ${type.toUpperCase()}! Sending email to admin...`);
+    // TODO: Integrate SendGrid/Resend here
+}
 
 const PORT = process.env.PORT || 3000;
 
@@ -207,6 +226,23 @@ app.get('/download/agent', (req, res) => {
     // For now, we just serve the main.py file itself as a demo
     const file = __dirname + '/../agent/main.py';
     res.download(file);
+});
+
+// Historical Stats API
+app.get('/api/stats/history/:agentId', async (req, res) => {
+    const { agentId } = req.params;
+    try {
+        const stats = await prisma.agentStat.findMany({
+            where: { agent_id: agentId },
+            orderBy: { timestamp: 'desc' },
+            take: 50 // Limit to last 50 records
+        });
+        // Reverse to show oldest to newest in chart
+        res.json(stats.reverse());
+    } catch (e) {
+        console.error('Error fetching history:', e);
+        res.status(500).json({ error: 'Failed to fetch history' });
+    }
 });
 
 async function startServer() {
