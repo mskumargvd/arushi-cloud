@@ -1,3 +1,62 @@
+import socketio
+import platform
+import uuid
+import psutil
+import logging
+import subprocess
+import time
+import os
+
+# Configuration
+SERVER_URL = 'http://localhost:3000'
+API_KEY = 'my_super_secret_key_12345'
+AGENT_ID = str(uuid.uuid4())
+
+# Logging Setup
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# Socket.IO Client
+sio = socketio.Client()
+
+class BaseAgent:
+    def __init__(self):
+        self.id = AGENT_ID
+        self.platform = platform.system()
+        self.hostname = platform.node()
+
+    def get_stats(self):
+        """Collect system statistics."""
+        try:
+            return {
+                'cpu': psutil.cpu_percent(interval=None),
+                'ram': psutil.virtual_memory().percent,
+                'disk': psutil.disk_usage('/').percent,
+                'uptime': int((time.time() - psutil.boot_time()) / 3600) # Hours
+            }
+        except Exception as e:
+            logger.error(f"Error collecting stats: {e}")
+            return {}
+
+    def _run_safe(self, command_list):
+        """Run a command safely and return output."""
+        try:
+            result = subprocess.run(command_list, capture_output=True, text=True, timeout=10)
+            return result.stdout.strip() or result.stderr.strip()
+        except Exception as e:
+            return f"Execution Error: {e}"
+
+    def execute_command(self, command_key):
+        """Base method to be overridden."""
+        return "Command not implemented"
+
+class WindowsAgent(BaseAgent):
+    def __init__(self):
+        super().__init__()
+        logger.info("Initializing WindowsAgent...")
+
+    def execute_command(self, command_key):
+        if command_key == 'ping_google':
             return self._run_safe(['ping', '-n', '4', '8.8.8.8'])
         elif command_key == 'check_logs':
             return self._run_safe(['powershell', '-Command', 'Get-EventLog -LogName System -Newest 5 | Format-Table -AutoSize'])
