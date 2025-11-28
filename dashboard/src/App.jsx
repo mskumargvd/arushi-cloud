@@ -2,7 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
 
 const socket = io('http://localhost:3000', {
-  autoConnect: false
+  autoConnect: false,
+  auth: {
+    token: 'my_super_secret_key_12345' // TODO: Move to env/config
+  }
 });
 
 function App() {

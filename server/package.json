@@ -8,11 +8,14 @@
         "dev": "nodemon server.js"
     },
     "dependencies": {
+        "dotenv": "^17.2.3",
         "express": "^4.21.2",
         "redis": "^4.6.10",
         "socket.io": "^4.8.1"
     },
     "devDependencies": {
-        "nodemon": "^3.0.1"
+        "@prisma/client": "^5.22.0",
+        "nodemon": "^3.0.1",
+        "prisma": "^5.22.0"
     }
 }
