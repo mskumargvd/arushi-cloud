@@ -141,7 +141,6 @@ io.on('connection', (socket) => {
         } else {
             io.to('dashboard').emit('command_output', result); // Broadcast to all dashboards
         }
-        console.log('Result received from agent');
     });
 
     // Heartbeat: Agent -> Server -> Dashboard
