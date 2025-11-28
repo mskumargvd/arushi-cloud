@@ -5,6 +5,7 @@ import subprocess
 import uuid
 import platform
 import logging
+import psutil
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -17,14 +18,20 @@ AGENT_ID = str(uuid.uuid4()) # Generate a unique ID for this session (persist th
 # Standard Python Socket.IO Client
 sio = socketio.Client(reconnection=True, reconnection_attempts=0, reconnection_delay=1)
 
-# Allowed commands (Whitelist)
-ALLOWED_COMMANDS = {
-    'pkg_update': ['pkg', 'update'],
-    'pkg_upgrade': ['pkg', 'upgrade', '-y'],
-    'check_logs': ['tail', '-n', '20', '/var/log/system.log'], # Example
-    'uptime': ['uptime'],
-    'ping_google': ['ping', '-c', '4', '8.8.8.8']
-}
+
+
+def get_system_stats():
+    try:
+        return {
+            'os': platform.system(),
+            'cpu': psutil.cpu_percent(interval=None), # Non-blocking
+            'ram': psutil.virtual_memory().percent,
+            'disk': psutil.disk_usage('/').percent,
+            'uptime': int(time.time() - psutil.boot_time()) // 3600 # Hours
+        }
+    except Exception as e:
+        logger.error(f"Error collecting stats: {e}")
+        return {}
 
 @sio.event
 def connect():
@@ -44,45 +51,74 @@ def disconnect():
 def on_execute_command(data):
     command_key = data.get('command')
     dashboard_id = data.get('id')
-    
-    logger.info(f"Received command request: {command_key}")
-    
-    if command_key not in ALLOWED_COMMANDS:
-        error_msg = f"Command '{command_key}' is not allowed."
-        logger.warning(error_msg)
-        sio.emit('command_result', {'dashboardId': dashboard_id, 'result': {'error': error_msg}})
-        return
+    print(f"Received command: {command_key}")
 
-    cmd_args = ALLOWED_COMMANDS[command_key]
-    
+    output = ""
+    system_os = platform.system()
+
     try:
-        # Execute command safely without shell=True
-        result = subprocess.run(cmd_args, capture_output=True, text=True, timeout=30)
-        output = result.stdout + result.stderr
-        logger.info(f"Command executed. Output length: {len(output)}")
+        # 1. PING GOOGLE
+        if command_key == 'ping_google':
+            host = "8.8.8.8"
+            # Windows uses -n, Linux uses -c
+            param = '-n' if system_os == 'Windows' else '-c'
+            cmd = ['ping', param, '4', host]
+            output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True)
         
-        sio.emit('command_result', {
-            'dashboardId': dashboard_id, 
-            'result': {
-                'output': output,
-                'code': result.returncode
-            }
-        })
+        # 2. CHECK LOGS
+        elif command_key == 'check_logs':
+            if system_os == 'Windows':
+                cmd = ['powershell', '-Command', 'Get-EventLog -LogName System -Newest 5 | Format-Table -AutoSize']
+            else:
+                cmd = ['tail', '-n', '20', '/var/log/system.log']
+            output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True)
+
+        # 3. UPDATE PACKAGES
+        elif command_key == 'pkg_update':
+            if system_os == 'Windows':
+                # Windows doesn't have a standardized 'update' for everything
+                output = "Checking Windows Update status...\n(Note: Full update requires Admin rights)\n"
+            else:
+                cmd = ['pkg', 'update']
+                output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True)
+        
+        # 4. UPTIME
+        elif command_key == 'uptime':
+             if system_os == 'Windows':
+                 cmd = ['powershell', '-Command', '(Get-CimInstance Win32_OperatingSystem).LastBootUpTime']
+             else:
+                 cmd = ['uptime']
+             output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, text=True)
+
+        else:
+            output = f"Unknown command: {command_key}"
+
+    except subprocess.CalledProcessError as e:
+        output = f"Error executing command:\n{e.output}"
     except Exception as e:
-        logger.error(f"Error executing command: {e}")
-        sio.emit('command_result', {
-            'dashboardId': dashboard_id, 
-            'result': {'error': str(e)}
-        })
+        output = f"Failed: {str(e)}"
+
+    # Send the result back to the dashboard
+    sio.emit('command_result', {'dashboardId': dashboard_id, 'result': {'output': output}})
 
 def main():
     logger.info(f"Starting Arushi Cloud Agent (ID: {AGENT_ID})...")
     
+    # Initial CPU call to set baseline
+    psutil.cpu_percent(interval=None)
+
     while True:
         try:
             if not sio.connected:
                 sio.connect(SERVER_URL)
-            sio.wait()
+            
+            # Heartbeat loop
+            while sio.connected:
+                stats = get_system_stats()
+                stats['id'] = AGENT_ID
+                sio.emit('heartbeat', stats)
+                time.sleep(5)
+                
         except Exception as e:
             logger.error(f"Connection loop error: {e}")
             time.sleep(5)

@@ -71,6 +71,19 @@ io.on('connection', (socket) => {
         console.log('Result received from agent');
     });
 
+    // Heartbeat: Agent -> Server -> Dashboard
+    socket.on('heartbeat', (data) => {
+        const { id } = data;
+        if (agents.has(id)) {
+            // Update stored agent data if needed
+            const currentData = agents.get(id);
+            agents.set(id, { ...currentData, lastHeartbeat: Date.now(), stats: data });
+
+            // Broadcast to dashboard
+            io.to('dashboard').emit('agent_update', data);
+        }
+    });
+
     socket.on('disconnect', () => {
         if (socket.data.type === 'agent') {
             console.log('Agent disconnected:', socket.data.agentId);

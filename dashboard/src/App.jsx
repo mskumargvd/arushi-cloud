@@ -39,12 +39,23 @@ function App() {
       setCommandOutput(prev => [...prev, result]);
     }
 
+    function onAgentUpdate(data) {
+      setAgents(prev => prev.map(agent =>
+        agent.id === data.id ? { ...agent, stats: data } : agent
+      ));
+
+      if (selectedAgent && selectedAgent.id === data.id) {
+        setSelectedAgent(prev => ({ ...prev, stats: data }));
+      }
+    }
+
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
     socket.on('agent_list', onAgentList);
     socket.on('agent_connected', onAgentConnected);
     socket.on('agent_disconnected', onAgentDisconnected);
     socket.on('command_output', onCommandOutput);
+    socket.on('agent_update', onAgentUpdate);
 
     return () => {
       socket.off('connect', onConnect);
@@ -53,9 +64,10 @@ function App() {
       socket.off('agent_connected', onAgentConnected);
       socket.off('agent_disconnected', onAgentDisconnected);
       socket.off('command_output', onCommandOutput);
+      socket.off('agent_update', onAgentUpdate);
       socket.disconnect();
     };
-  }, []);
+  }, [selectedAgent]); // Re-bind effect if selectedAgent changes (optimization: could be better)
 
   const sendCommand = (command) => {
     if (!selectedAgent) return;
@@ -84,6 +96,11 @@ function App() {
               >
                 <div className="font-medium text-gray-900">Agent {agent.id.substring(0, 8)}...</div>
                 <div className="text-sm text-gray-500">{agent.platform}</div>
+                {agent.stats && (
+                  <div className="text-xs text-gray-400 mt-1">
+                    CPU: {agent.stats.cpu}% | RAM: {agent.stats.ram}%
+                  </div>
+                )}
               </li>
             ))}
             {agents.length === 0 && (
@@ -100,6 +117,28 @@ function App() {
 
           {selectedAgent ? (
             <>
+              {/* Live Stats Card */}
+              {selectedAgent.stats && (
+                <div className="grid grid-cols-4 gap-4 mb-6 bg-gray-50 p-4 rounded border border-gray-200">
+                  <div className="text-center">
+                    <div className="text-sm text-gray-500">CPU</div>
+                    <div className="text-xl font-bold text-gray-800">{selectedAgent.stats.cpu}%</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-sm text-gray-500">RAM</div>
+                    <div className="text-xl font-bold text-gray-800">{selectedAgent.stats.ram}%</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-sm text-gray-500">Disk</div>
+                    <div className="text-xl font-bold text-gray-800">{selectedAgent.stats.disk}%</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-sm text-gray-500">Uptime</div>
+                    <div className="text-xl font-bold text-gray-800">{selectedAgent.stats.uptime}h</div>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <button onClick={() => sendCommand('pkg_update')} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">Update Packages</button>
                 <button onClick={() => sendCommand('check_logs')} className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 transition">Check Logs</button>
