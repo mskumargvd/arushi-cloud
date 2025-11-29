@@ -47,7 +47,7 @@ function App() {
     // Prevent multiple connections
     if (socket?.connected) return;
 
-    const newSocket = io(SERVER_URL, {
+    const newSocket = io(import.meta.env.VITE_SERVER_URL, {
       autoConnect: true,
       transports: ['websocket'],
       auth: { token: token }
@@ -97,7 +97,7 @@ function App() {
     const endpoint = isRegistering ? '/api/register' : '/api/login';
 
     try {
-      const res = await fetch(`${SERVER_URL}${endpoint} `, {
+      const res = await fetch(`${import.meta.env.VITE_SERVER_URL}${endpoint} `, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: emailInput, password: passwordInput })
@@ -236,7 +236,7 @@ function App() {
               <span className="text-xs text-slate-400 font-medium">Server Status</span>
               <span className={`w - 2 h - 2 rounded - full ${isConnected ? 'bg-emerald-500' : 'bg-red-500 animate-pulse'} `} />
             </div>
-            <div className="text-xs text-slate-500 truncate">{(SERVER_URL || '').replace('https://', '')}</div>
+            <div className="text-xs text-slate-500 truncate">{(import.meta.env.VITE_SERVER_URL || '').replace('https://', '')}</div>
           </div>
           <button onClick={handleLogout} className="w-full flex items-center px-4 py-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">
             <LogOut className="w-4 h-4 mr-3" />
