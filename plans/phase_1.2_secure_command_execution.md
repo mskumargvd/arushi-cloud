@@ -4,7 +4,7 @@
 Ensure the Agent only executes authorized commands and prevents command injection attacks.
 
 ## Current State Analysis
-The current `agent/main.py` uses an `if/elif` block to map `command_key` to specific `subprocess` calls.
+The current `agent/agent.py` uses an `if/elif` block to map `command_key` to specific `subprocess` calls.
 - **Pros:** Highly secure as arguments are hardcoded.
 - **Cons:** Hard to maintain as list grows.
 - **Vulnerability Check:** Windows commands use `powershell -Command "string"`. Since "string" is currently hardcoded, it is safe. If we ever accept user arguments, we must sanitize them.
@@ -12,7 +12,7 @@ The current `agent/main.py` uses an `if/elif` block to map `command_key` to spec
 ## Proposed Changes
 
 ### Agent (Python)
-#### [MODIFY] [main.py](file:///d:/Business/arushi-cloud/agent/main.py)
+#### [MODIFY] [agent.py](file:///d:/Business/arushi-cloud/agent/agent.py)
 - Refactor the `if/elif` block into a `COMMAND_HANDLERS` dictionary for better maintainability.
 - Explicitly define a `run_safe_command` helper that enforces `shell=False`.
 - Add a "Strict Mode" check: If a command is not in the whitelist, log a security warning.

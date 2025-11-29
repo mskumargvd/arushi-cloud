@@ -4,13 +4,13 @@
 Refactor the Agent into a class-based structure to automatically detect the OS and load the appropriate command logic (Windows vs. Linux vs. OPNsense).
 
 ## Current State Analysis
-Currently, `main.py` uses `platform.system()` checks inside every handler function. This is not scalable.
+Currently, `agent.py` uses `platform.system()` checks inside every handler function. This is not scalable.
 We need a polymorphic structure where `agent.get_system_stats()` or `agent.execute_command()` behaves differently based on the subclass.
 
 ## Proposed Changes
 
 ### Agent (Python)
-#### [MODIFY] [main.py](file:///d:/Business/arushi-cloud/agent/main.py)
+#### [MODIFY] [agent.py](file:///d:/Business/arushi-cloud/agent/agent.py)
 - Define `BaseAgent` class with common methods:
     - `connect()`
     - `heartbeat_loop()`

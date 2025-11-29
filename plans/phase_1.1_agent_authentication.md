@@ -16,7 +16,7 @@ Implement API Key authentication to prevent unauthorized agents from connecting 
 - Reject connection if token doesn't match `AGENT_SECRET_KEY`.
 
 ### Agent (Python)
-#### [MODIFY] [main.py](file:///d:/Business/arushi-cloud/agent/main.py)
+#### [MODIFY] [agent.py](file:///d:/Business/arushi-cloud/agent/agent.py)
 - Add `API_KEY` constant (hardcoded for now, or env var).
 - Update `sio.connect` to include `auth={'token': API_KEY}`.
 

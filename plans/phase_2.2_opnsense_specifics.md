@@ -6,7 +6,7 @@ Implement OPNsense-specific functionality using the OPNsense API and system comm
 ## Proposed Changes
 
 ### Agent (Python)
-#### [MODIFY] [main.py](file:///d:/Business/arushi-cloud/agent/main.py)
+#### [MODIFY] [agent.py](file:///d:/Business/arushi-cloud/agent/agent.py)
 - Update `OPNsenseAgent` class.
 - Add configuration for `OPNSENSE_KEY` and `OPNSENSE_SECRET`.
 - Implement `execute_command` handlers for:

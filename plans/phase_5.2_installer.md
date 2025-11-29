@@ -16,7 +16,7 @@ Create scripts (`install.sh` and `install.ps1`) that users can run on their devi
 - **Logic:**
     1.  Check for Python 3.
     2.  Create directory `/opt/arushi-agent`.
-    3.  Download `main.py` from Server.
+    3.  Download `agent.py` from Server.
     4.  Create a `systemd` service (Linux) or `rc.d` script (FreeBSD/OPNsense) to run it on boot.
     5.  Start the service.
 
@@ -24,7 +24,7 @@ Create scripts (`install.sh` and `install.ps1`) that users can run on their devi
 - **Target:** Windows.
 - **Logic:**
     1.  Create directory `C:\ArushiAgent`.
-    2.  Download `main.py`.
+    2.  Download `agent.py`.
     3.  Create a Scheduled Task to run the agent on boot (simplest method without external tools like NSSM).
 
 ## Verification Plan

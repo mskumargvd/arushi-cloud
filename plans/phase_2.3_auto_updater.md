@@ -6,7 +6,7 @@ Allow the Agent to self-update by downloading a new version of itself from the s
 ## Proposed Changes
 
 ### Agent (Python)
-#### [MODIFY] [main.py](file:///d:/Business/arushi-cloud/agent/main.py)
+#### [MODIFY] [agent.py](file:///d:/Business/arushi-cloud/agent/agent.py)
 - Add `CURRENT_VERSION = "1.0.0"` constant.
 - Add `check_for_updates` method to `BaseAgent`.
 - Implement `self_update` logic:

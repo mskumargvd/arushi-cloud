@@ -223,7 +223,7 @@ app.get('/api/version', (req, res) => {
 app.get('/download/agent', (req, res) => {
     // In a real app, this would serve the correct binary/script for the OS
     // For now, we just serve the main.py file itself as a demo
-    const file = __dirname + '/../agent/main.py';
+    const file = __dirname + '/../agent/agent.py';
     res.download(file);
 });
 
