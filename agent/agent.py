@@ -6,11 +6,44 @@ import logging
 import subprocess
 import time
 import os
+import json
+import requests
+import urllib3
 
-# Configuration
-SERVER_URL = 'http://localhost:3000'
-API_KEY = 'my_super_secret_key_12345'
-AGENT_ID = str(uuid.uuid4())
+# Disable warnings for self-signed certificates (OPNsense Localhost)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# --- CONFIGURATION LOADER ---
+CONFIG_FILE = 'agent_config.json'
+config = {}
+
+def load_config():
+    global config
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, 'r') as f:
+            config = json.load(f)
+    else:
+        print("\n--- 🚀 Arushi Agent First-Run Setup ---")
+        config['server_url'] = input("Enter Cloud Server URL (e.g., http://localhost:3000): ").strip()
+        config['api_key'] = input("Enter Agent Secret Key: ").strip()
+        
+        # OPNsense Specifics
+        if platform.system() == 'FreeBSD':
+            print("\n--- OPNsense Configuration ---")
+            config['opnsense_key'] = input("Enter OPNsense API Key: ").strip()
+            config['opnsense_secret'] = input("Enter OPNsense API Secret: ").strip()
+            config['opnsense_url'] = 'https://localhost/api'
+        
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f)
+            print("✅ Configuration saved! Starting agent...\n")
+
+# Load config immediately
+load_config()
+
+SERVER_URL = config.get('server_url')
+API_KEY = config.get('api_key')
+AGENT_ID = str(uuid.uuid4()) # In production, save this ID to config too so it doesn't change on reboot
 
 # Logging Setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -26,155 +59,88 @@ class BaseAgent:
         self.hostname = platform.node()
 
     def get_stats(self):
-        """Collect system statistics."""
         try:
             return {
                 'cpu': psutil.cpu_percent(interval=None),
                 'ram': psutil.virtual_memory().percent,
                 'disk': psutil.disk_usage('/').percent,
-                'uptime': int((time.time() - psutil.boot_time()) / 3600) # Hours
+                'uptime': int((time.time() - psutil.boot_time()) / 3600)
             }
         except Exception as e:
             logger.error(f"Error collecting stats: {e}")
             return {}
 
     def _run_safe(self, command_list):
-        """Run a command safely and return output."""
         try:
             result = subprocess.run(command_list, capture_output=True, text=True, timeout=10)
             return result.stdout.strip() or result.stderr.strip()
         except Exception as e:
             return f"Execution Error: {e}"
 
-    def self_update(self):
-        """Downloads the latest agent script and restarts."""
-        try:
-            import requests
-            import sys
-            
-            logger.info("Checking for updates...")
-            # In a real scenario, we would check version first.
-            # Here we force download for demo.
-            url = f"{SERVER_URL}/download/agent"
-            response = requests.get(url)
-            
-            if response.status_code == 200:
-                logger.info("Downloading new agent...")
-                current_file = os.path.abspath(__file__)
-                
-                # Backup current file
-                backup_file = current_file + ".bak"
-                try:
-                    os.rename(current_file, backup_file)
-                except OSError:
-                    pass # Maybe file is locked or permission issue, proceed with caution
-                
-                # Write new file
-                with open(current_file, 'wb') as f:
-                    f.write(response.content)
-                    
-                logger.info("Update successful! Restarting...")
-                
-                # Restart the process
-                os.execv(sys.executable, ['python'] + sys.argv)
-            else:
-                return f"Update failed: Server returned {response.status_code}"
-                
-        except Exception as e:
-            logger.error(f"Update error: {e}")
-            # Try to restore backup if exists
-            if os.path.exists(backup_file):
-                os.rename(backup_file, current_file)
-            return f"Update failed: {e}"
-
     def execute_command(self, command_key):
-        """Base method to be overridden."""
-        if command_key == 'self_update':
-            return self.self_update()
         return "Command not implemented"
 
 class WindowsAgent(BaseAgent):
-    def __init__(self):
-        super().__init__()
-        logger.info("Initializing WindowsAgent...")
-
     def execute_command(self, command_key):
         if command_key == 'ping_google':
             return self._run_safe(['ping', '-n', '4', '8.8.8.8'])
         elif command_key == 'check_logs':
             return self._run_safe(['powershell', '-Command', 'Get-EventLog -LogName System -Newest 5 | Format-Table -AutoSize'])
         elif command_key == 'pkg_update':
-            return "Checking Windows Update status...\n(Note: Full update requires Admin rights)\n"
-        elif command_key == 'uptime':
-            return self._run_safe(['powershell', '-Command', '(Get-CimInstance Win32_OperatingSystem).LastBootUpTime'])
-        return super().execute_command(command_key)
+            return "Windows Update check requires Admin privileges."
+        return f"Unknown command: {command_key}"
 
 class LinuxAgent(BaseAgent):
-    def __init__(self):
-        super().__init__()
-        logger.info("Initializing LinuxAgent...")
-
     def execute_command(self, command_key):
         if command_key == 'ping_google':
             return self._run_safe(['ping', '-c', '4', '8.8.8.8'])
         elif command_key == 'check_logs':
-            return self._run_safe(['tail', '-n', '20', '/var/log/syslog']) # Default linux log
+            return self._run_safe(['tail', '-n', '20', '/var/log/syslog'])
         elif command_key == 'pkg_update':
-            return self._run_safe(['apt', 'update']) # Default to apt for now
-        elif command_key == 'uptime':
-            return self._run_safe(['uptime'])
-        return super().execute_command(command_key)
+            return self._run_safe(['apt', 'update'])
+        return f"Unknown command: {command_key}"
 
 class OPNsenseAgent(LinuxAgent):
     def __init__(self):
         super().__init__()
-        logger.info("Initializing OPNsenseAgent...")
-        # TODO: Load these from secure storage or env vars
-        self.api_key = 'YOUR_OPNSENSE_KEY'
-        self.api_secret = 'YOUR_OPNSENSE_SECRET'
-        self.api_url = 'https://localhost/api' # Localhost if running on the box itself
+        self.api_key = config.get('opnsense_key')
+        self.api_secret = config.get('opnsense_secret')
+        self.api_url = config.get('opnsense_url')
 
     def execute_command(self, command_key):
-        # Override specific commands for FreeBSD/OPNsense
         if command_key == 'check_logs':
-            # Try API first, fall back to file
+            # REAL API CALL with SSL Verify Disabled
             try:
-                # In a real scenario, we would make a request:
-                # response = requests.get(f'{self.api_url}/diagnostics/log/core/firewall', auth=(self.api_key, self.api_secret), verify=False)
-                # return response.text
-                return self._run_safe(['tail', '-n', '20', '/var/log/system.log'])
+                # OPNsense firewall log endpoint
+                endpoint = f'{self.api_url}/diagnostics/log/core/firewall'
+                res = requests.get(endpoint, auth=(self.api_key, self.api_secret), verify=False, timeout=5)
+                if res.status_code == 200:
+                    # Parse JSON response or return raw text
+                    return str(res.json()['rows'][:5]) # Return last 5 logs
+                return f"API Error {res.status_code}: {res.text}"
             except Exception as e:
-                return f"API Error: {e}"
-        
-        elif command_key == 'pkg_update':
-            return self._run_safe(['pkg', 'update'])
+                return f"API Connection Failed: {e}"
         
         elif command_key == 'backup_config':
-            return "Simulating config backup download..."
-            # Real implementation:
-            # response = requests.get(f'{self.api_url}/core/backup/download', auth=(self.api_key, self.api_secret), verify=False)
-            # return "Config backup downloaded successfully (size: ...)"
-        
-        # Fallback to standard Linux commands (like ping, uptime)
+            try:
+                endpoint = f'{self.api_url}/core/backup/download'
+                res = requests.get(endpoint, auth=(self.api_key, self.api_secret), verify=False, stream=True)
+                if res.status_code == 200:
+                    # In real app, upload this content to S3
+                    return f"✅ Success: Downloaded {len(res.content)} bytes. (Ready to upload)"
+                return f"Backup Failed: {res.status_code}"
+            except Exception as e:
+                return f"Backup Error: {e}"
+
         return super().execute_command(command_key)
 
 def get_agent():
-    """Factory to return the correct agent instance."""
     system = platform.system()
-    if system == 'Windows':
-        return WindowsAgent()
-    elif system == 'Linux':
-        # Simple check for OPNsense (FreeBSD is reported as 'FreeBSD' usually, but python might say Linux if compat layer? 
-        # Actually platform.system() returns 'FreeBSD' on FreeBSD.
-        # Let's handle FreeBSD as OPNsense for now.
-        return LinuxAgent()
-    elif system == 'FreeBSD':
-        return OPNsenseAgent()
-    else:
-        logger.warning(f"Unknown OS: {system}. Defaulting to LinuxAgent.")
-        return LinuxAgent()
+    if system == 'Windows': return WindowsAgent()
+    elif system == 'Linux': return LinuxAgent()
+    elif system == 'FreeBSD': return OPNsenseAgent()
+    else: return LinuxAgent()
 
-# Global Agent Instance
 agent = get_agent()
 
 @sio.event
@@ -182,46 +148,54 @@ def connect():
     logger.info("Connected to server!")
     sio.emit('register_agent', {'id': agent.id, 'platform': agent.platform})
 
-@sio.event
-def connect_error(data):
-    logger.error(f"Connection failed: {data}")
-
-@sio.event
-def disconnect():
-    logger.info("Disconnected from server!")
-
 @sio.on('execute_command')
 def on_execute_command(data):
     command_key = data.get('command')
     dashboard_id = data.get('id')
-    print(f"Received command: {command_key}")
-
+    logger.info(f"Executing: {command_key}")
     output = agent.execute_command(command_key)
-
-    # Send the result back to the dashboard
     sio.emit('command_result', {'dashboardId': dashboard_id, 'result': {'output': output}})
 
+# --- MAIN LOOP WITH OFFLINE QUEUE ---
 def main():
-    logger.info(f"Starting Arushi Cloud Agent (ID: {AGENT_ID})...")
+    logger.info(f"Starting Arushi Cloud Agent (ID: {AGENT_ID[:8]}...)")
+    psutil.cpu_percent(interval=None) # Init CPU
     
-    # Initial CPU call to set baseline
-    psutil.cpu_percent(interval=None)
+    msg_queue = [] # The Offline Buffer
 
     while True:
         try:
             if not sio.connected:
+                # Auth token from config
                 sio.connect(SERVER_URL, auth={'token': API_KEY})
             
-            # Heartbeat loop
             while sio.connected:
                 stats = agent.get_stats()
                 stats['id'] = agent.id
+                
+                # 1. Flush Queue if internet is back
+                while msg_queue:
+                    logger.info(f"Uploading {len(msg_queue)} queued stats...")
+                    old_stats = msg_queue.pop(0)
+                    sio.emit('heartbeat', old_stats)
+                    time.sleep(0.1) # Be gentle
+
+                # 2. Send Current Stats
                 sio.emit('heartbeat', stats)
                 time.sleep(5)
-                
+
         except Exception as e:
-            logger.error(f"Connection loop error: {e}")
-            time.sleep(5)
+            logger.error(f"Connection lost: {e}")
+            # OFFLINE MODE: Queue the data
+            stats = agent.get_stats()
+            stats['id'] = agent.id
+            msg_queue.append(stats)
+            
+            # Limit queue to prevent RAM explosion (Keep last 1 hour of data)
+            if len(msg_queue) > 720: 
+                msg_queue.pop(0)
+            
+            time.sleep(5) # Wait before retry
 
 if __name__ == '__main__':
     main()
