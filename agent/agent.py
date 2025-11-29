@@ -165,7 +165,7 @@ agent = get_agent()
 @sio.event
 def connect():
     logger.info("Connected to server!")
-    sio.emit('register_agent', {'id': agent.id, 'platform': agent.platform})
+    sio.emit('register_agent', {'id': agent.id, 'platform': agent.platform, 'hostname': agent.hostname})
 
 @sio.on('execute_command')
 def on_execute_command(data):
