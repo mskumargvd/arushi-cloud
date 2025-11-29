@@ -12,6 +12,7 @@ import SecurityScore from './components/SecurityScore';
 import FirewallControls from './components/FirewallControls';
 import Backups from './components/Backups';
 import LiveLogs from './components/LiveLogs';
+import ProcessManager from './components/ProcessManager';
 
 // --- CONFIG ---
 // YOUR RENDER URL GOES HERE
@@ -28,6 +29,7 @@ function App() {
   const [socket, setSocket] = useState(null);
   const [agents, setAgents] = useState([]);
   const [selectedAgent, setSelectedAgent] = useState(null);
+  const [detailTab, setDetailTab] = useState('overview'); // 'overview' | 'processes'
   const [isConnected, setIsConnected] = useState(false);
   const [currentView, setCurrentView] = useState('overview'); // 'overview', 'agents', 'logs', 'settings'
   const [showAddDevice, setShowAddDevice] = useState(false);
@@ -318,31 +320,53 @@ function App() {
                     <ChevronRight className="w-4 h-4 rotate-180 mr-1" /> Back to List
                   </button>
 
-                  {/* Top Stats Row */}
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="lg:col-span-1">
-                      <SecurityScore agents={[selectedAgent]} />
-                    </div>
-                    <div className="lg:col-span-2 grid grid-cols-4 gap-4">
-                      <StatBig label="CPU Load" value={`${selectedAgent.stats?.cpu || 0}% `} icon={<Cpu />} color="text-purple-400" />
-                      <StatBig label="Memory" value={`${selectedAgent.stats?.ram || 0}% `} icon={<HardDrive />} color="text-emerald-400" />
-                      <StatBig label="Disk" value={`${selectedAgent.stats?.disk || 0}% `} icon={<Server />} color="text-blue-400" />
-                      <StatBig label="Uptime" value={`${selectedAgent.stats?.uptime || 0} h`} icon={<Clock />} color="text-orange-400" />
-                    </div>
+                  {/* Tabs for Detail View */}
+                  <div className="flex space-x-4 border-b border-slate-700 pb-2 mb-4">
+                    <button
+                      onClick={() => setDetailTab('overview')}
+                      className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${detailTab === 'overview' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                    >
+                      Overview
+                    </button>
+                    <button
+                      onClick={() => setDetailTab('processes')}
+                      className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${detailTab === 'processes' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                    >
+                      Processes
+                    </button>
                   </div>
 
-                  {/* Middle Row: Charts & Terminal */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[400px]">
-                    <div className="bg-[#1e293b] rounded-xl border border-slate-700 p-4 flex flex-col">
-                      <h3 className="text-sm font-bold text-slate-400 uppercase mb-4">Live Metrics</h3>
-                      <div className="flex-1 min-h-0">
-                        <HistoricalChart agentId={selectedAgent.id} liveStats={selectedAgent.stats} />
+                  {detailTab === 'overview' ? (
+                    <>
+                      {/* Top Stats Row */}
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="lg:col-span-1">
+                          <SecurityScore agents={[selectedAgent]} />
+                        </div>
+                        <div className="lg:col-span-2 grid grid-cols-4 gap-4">
+                          <StatBig label="CPU Load" value={`${selectedAgent.stats?.cpu || 0}% `} icon={<Cpu />} color="text-purple-400" />
+                          <StatBig label="Memory" value={`${selectedAgent.stats?.ram || 0}% `} icon={<HardDrive />} color="text-emerald-400" />
+                          <StatBig label="Disk" value={`${selectedAgent.stats?.disk || 0}% `} icon={<Server />} color="text-blue-400" />
+                          <StatBig label="Uptime" value={`${selectedAgent.stats?.uptime || 0} h`} icon={<Clock />} color="text-orange-400" />
+                        </div>
                       </div>
-                    </div>
-                    <div className="bg-[#1e293b] rounded-xl border border-slate-700 p-4 flex flex-col overflow-hidden">
-                      <CommandCenter agentId={selectedAgent.id} socket={socket} />
-                    </div>
-                  </div>
+
+                      {/* Middle Row: Charts & Terminal */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[400px]">
+                        <div className="bg-[#1e293b] rounded-xl border border-slate-700 p-4 flex flex-col">
+                          <h3 className="text-sm font-bold text-slate-400 uppercase mb-4">Live Metrics</h3>
+                          <div className="flex-1 min-h-0">
+                            <HistoricalChart agentId={selectedAgent.id} liveStats={selectedAgent.stats} />
+                          </div>
+                        </div>
+                        <div className="bg-[#1e293b] rounded-xl border border-slate-700 p-4 flex flex-col overflow-hidden">
+                          <CommandCenter agentId={selectedAgent.id} socket={socket} />
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <ProcessManager agentId={selectedAgent.id} socket={socket} />
+                  )}
 
                   {/* OPNsense Specific Modules */}
                   {selectedAgent.platform === 'FreeBSD' && (

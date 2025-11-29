@@ -88,6 +88,26 @@ class WindowsAgent(BaseAgent):
             return self._run_safe(['powershell', '-Command', 'Get-EventLog -LogName System -Newest 5 | Format-Table -AutoSize'])
         elif command_key == 'pkg_update':
             return "Windows Update check requires Admin privileges."
+        elif command_key == 'get_processes':
+            try:
+                procs = []
+                for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
+                    try:
+                        procs.append(p.info)
+                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                        pass
+                procs.sort(key=lambda x: x['cpu_percent'] or 0, reverse=True)
+                return procs[:20]
+            except Exception as e:
+                return f"Error fetching processes: {e}"
+        elif command_key == 'kill_process':
+            try:
+                pid = int(payload.get('pid'))
+                p = psutil.Process(pid)
+                p.terminate()
+                return f"✅ Successfully terminated process {pid}"
+            except Exception as e:
+                return f"❌ Error: {e}"
         return f"Unknown command: {command_key}"
 
 class LinuxAgent(BaseAgent):
@@ -98,6 +118,26 @@ class LinuxAgent(BaseAgent):
             return self._run_safe(['tail', '-n', '20', '/var/log/syslog'])
         elif command_key == 'pkg_update':
             return self._run_safe(['apt', 'update'])
+        elif command_key == 'get_processes':
+            try:
+                procs = []
+                for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
+                    try:
+                        procs.append(p.info)
+                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                        pass
+                procs.sort(key=lambda x: x['cpu_percent'] or 0, reverse=True)
+                return procs[:20]
+            except Exception as e:
+                return f"Error fetching processes: {e}"
+        elif command_key == 'kill_process':
+            try:
+                pid = int(payload.get('pid'))
+                p = psutil.Process(pid)
+                p.terminate()
+                return f"✅ Successfully terminated process {pid}"
+            except Exception as e:
+                return f"❌ Error: {e}"
         return f"Unknown command: {command_key}"
 
 class OPNsenseAgent(LinuxAgent):
