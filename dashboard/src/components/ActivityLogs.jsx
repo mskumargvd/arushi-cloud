@@ -25,7 +25,10 @@ export default function ActivityLogs() {
                                 log.status === 'success' ? <CheckCircle size={18} /> : <Info size={18} />}
                         </div>
                         <div className="flex-1">
-                            <p className="text-sm text-slate-200">{log.message}</p>
+                            <p className="text-sm text-slate-200">
+                                {log.agent?.hostname && <span className="font-bold text-blue-400 mr-2">[{log.agent.hostname}]</span>}
+                                {log.message}
+                            </p>
                             <p className="text-xs text-slate-500 mt-1 flex items-center">
                                 <Clock size={12} className="mr-1" />
                                 {new Date(log.timestamp).toLocaleString()}

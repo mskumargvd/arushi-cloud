@@ -159,6 +159,7 @@ io.on('connection', (socket) => {
         if (agentData && agentData.socketId) {
             io.to(agentData.socketId).emit('execute_command', { command, payload, id: socket.id }); // Pass dashboard socket ID to reply back
             console.log(`Command sent to agent ${agentId}: ${command}`);
+            createLog(agentId, 'command', `Executed "${command}"`, 'success');
         } else {
             console.log(`Agent ${agentId} not found`);
             socket.emit('command_error', { message: 'Agent not found' });
@@ -251,6 +252,23 @@ function sendAlert(agentId, type) {
     console.log(`Subject: ${subject}`);
     console.log(`Body: ${body}`);
     console.log('==================================================\n');
+
+    createLog(agentId, 'alert', `Agent ${type.toUpperCase()}`, 'error');
+}
+
+async function createLog(agentId, type, message, status) {
+    try {
+        await prisma.log.create({
+            data: {
+                agent_id: agentId,
+                type,
+                message,
+                status
+            }
+        });
+    } catch (e) {
+        console.error('Error creating log:', e);
+    }
 }
 
 const PORT = process.env.PORT || 3000;
@@ -296,35 +314,6 @@ app.get('/api/stats/history/:agentId', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch history' });
     }
 });
-
-
-// Get Activity Logs
-app.get('/api/logs', async (req, res) => {
-    try {
-        // In a real app, you'd filter by user.id
-        // For now, get last 100 logs
-        const logs = await prisma.agentStat.findMany({
-            // Actually, we should create a separate 'Log' model for commands
-            // For Phase 1, let's reuse agentStat or just return mock data if you didn't create a Log model yet.
-            // Let's CREATE a simple Log model in schema first?
-            // OR: Just use an in-memory array for the MVP to keep it simple.
-
-            // SIMPLIFIED MVP APPROACH:
-            // We will return the last 50 commands stored in memory for now.
-            // (In Phase 5, we add a proper 'CommandLog' table)
-        });
-
-        // Mock Response for MVP (Replace with DB call later)
-        res.json([
-            { id: 1, type: 'command', message: 'Executed "ping_google" on Agent Windows-PC', timestamp: new Date(), status: 'success' },
-            { id: 2, type: 'alert', message: 'Agent Linux-Server went OFFLINE', timestamp: new Date(Date.now() - 50000), status: 'error' },
-            { id: 3, type: 'info', message: 'Agent MacBook-Pro Registered', timestamp: new Date(Date.now() - 100000), status: 'info' },
-        ]);
-    } catch (e) {
-        res.status(500).json({ error: 'Failed to fetch logs' });
-    }
-});
-
 async function startServer() {
     try {
         await prisma.$connect();
