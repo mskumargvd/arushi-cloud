@@ -7,8 +7,8 @@ const AddDeviceWizard = ({ isOpen, onClose }) => {
     const [copied, setCopied] = useState(false);
 
     // TODO: In production, fetch a unique API Key for this new device from the backend
-    const apiKey = "YOUR_API_KEY_HERE";
-    const serverUrl = "https://arushi-cloud-server-v1.onrender.com"; // Should match SERVER_URL in App.jsx
+    const apiKey = import.meta.env.VITE_AGENT_SECRET_KEY;
+    const serverUrl = import.meta.env.VITE_SERVER_URL;
 
     const commands = {
         linux: `curl -sL ${serverUrl}/download/install.sh | sudo bash`,

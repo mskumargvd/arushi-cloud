@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { Save, Copy, Check } from 'lucide-react';
 
 export default function Settings() {
-    const [apiKey, setApiKey] = useState('my_super_secret_key_12345');
+    const [apiKey, setApiKey] = useState(import.meta.env.VITE_AGENT_SECRET_KEY);
     const [copied, setCopied] = useState(false);
 
-    const installCommand = `curl -sL https://arushi.com/install.sh | sudo bash -s -- --key=${apiKey}`;
+    const installCommand = `curl -sL ${import.meta.env.VITE_SERVER_URL}/download/install.sh | sudo bash -s -- --key=${apiKey}`;
 
     const handleCopy = () => {
         navigator.clipboard.writeText(installCommand);

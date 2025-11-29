@@ -6,7 +6,7 @@ export default function ActivityLogs() {
 
     useEffect(() => {
         // Fetch logs (Replace URL with your Render URL)
-        fetch('https://arushi-cloud-server-v1.onrender.com/api/logs')
+        fetch(`${import.meta.env.VITE_SERVER_URL}/api/logs`)
             .then(res => res.json())
             .then(data => setLogs(data))
             .catch(err => console.error(err));

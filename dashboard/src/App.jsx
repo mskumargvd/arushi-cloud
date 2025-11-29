@@ -16,7 +16,7 @@ import ProcessManager from './components/ProcessManager';
 
 // --- CONFIG ---
 // YOUR RENDER URL GOES HERE
-const SERVER_URL = 'https://arushi-cloud-server-v1.onrender.com';
+const SERVER_URL = import.meta.env.VITE_SERVER_URL;
 
 
 

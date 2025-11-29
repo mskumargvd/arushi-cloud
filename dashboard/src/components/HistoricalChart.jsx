@@ -8,7 +8,7 @@ export default function HistoricalChart({ agentId, liveStats }) {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const res = await fetch(`https://arushi-cloud-server-v1.onrender.com/api/stats/history/${agentId}`);
+                const res = await fetch(`${import.meta.env.VITE_SERVER_URL}/api/stats/history/${agentId}`);
                 const json = await res.json();
                 // Format timestamp for display
                 const formatted = json.map(item => ({
