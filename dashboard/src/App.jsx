@@ -18,7 +18,7 @@ import ProcessManager from './components/ProcessManager';
 // YOUR RENDER URL GOES HERE
 const SERVER_URL = import.meta.env.VITE_SERVER_URL;
 
-
+console.log("MY SERVER URL IS:", import.meta.env.VITE_SERVER_URL);
 
 function App() {
   // --- STATE ---

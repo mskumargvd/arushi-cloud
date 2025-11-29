@@ -3,6 +3,8 @@ const http = require('http');
 const { Server } = require('socket.io');
 const { createClient } = require('redis');
 const { PrismaClient } = require('@prisma/client');
+
+const disconnectTimers = new Map(); // Store timers for grace periods
 require('dotenv').config();
 
 const cors = require('cors'); // Add this dependency if missing, or use manual headers
@@ -103,6 +105,18 @@ io.on('connection', (socket) => {
     // Identify if it's an agent or dashboard
     socket.on('register_agent', async (data) => {
         console.log('Agent registered:', data.id);
+
+        // --- NEW: CANCEL GRACE PERIOD ---
+        if (disconnectTimers.has(data.id)) {
+            console.log(`Agent ${data.id} reconnected within grace period. Cancelling alert.`);
+            clearTimeout(disconnectTimers.get(data.id));
+            disconnectTimers.delete(data.id);
+        } else {
+            // Only log "Connected" if it wasn't just a quick blip
+            createLog(data.id, 'system', `Agent ${data.hostname || 'Unknown'} Connected`, 'info');
+        }
+        // -------------------------------
+
         // Set status to online
         agents.set(data.id, { socketId: socket.id, status: 'online', ...data });
         socket.join('agents');
@@ -219,21 +233,31 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         if (socket.data.type === 'agent') {
             const agentId = socket.data.agentId;
-            console.log('Agent disconnected:', agentId);
+            console.log('Agent disconnected (Starting Grace Period):', agentId);
 
-            // Mark as offline instead of deleting
-            if (agents.has(agentId)) {
-                const agent = agents.get(agentId);
-                agent.status = 'offline';
-                agent.socketId = null; // No longer reachable
-                agents.set(agentId, agent);
+            // --- NEW: GRACE PERIOD LOGIC ---
+            // Don't mark offline immediately. Wait 30 seconds.
+            const timer = setTimeout(async () => {
+                if (agents.has(agentId)) {
+                    console.log(`Agent ${agentId} confirmed OFFLINE after 30s.`);
 
-                // Notify dashboard
-                io.to('dashboard').emit('agent_update', { id: agentId, status: 'offline' });
+                    const agent = agents.get(agentId);
+                    agent.status = 'offline';
+                    agent.socketId = null; // No longer reachable
+                    agents.set(agentId, agent);
 
-                // Trigger Alert
-                sendAlert(agentId, 'offline');
-            }
+                    // Notify dashboard
+                    io.to('dashboard').emit('agent_update', { id: agentId, status: 'offline' });
+
+                    // Trigger Alert
+                    sendAlert(agentId, 'offline');
+                }
+            }, 30000); // 30 seconds
+
+            // Store timer for this agent
+            disconnectTimers.set(agentId, timer);
+            // -------------------------------
+
         } else {
             console.log('Client disconnected:', socket.id);
         }
