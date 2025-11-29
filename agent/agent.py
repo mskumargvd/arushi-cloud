@@ -91,6 +91,9 @@ class BaseAgent:
 
 class WindowsAgent(BaseAgent):
     def execute_command(self, command_key, payload=None):
+        # FIX: Ensure payload is always a dictionary to prevent crashes
+        if payload is None: payload = {}
+
         if command_key == 'ping_google':
             return self._run_safe(['ping', '-n', '4', '8.8.8.8'])
         elif command_key == 'check_logs':
@@ -112,6 +115,7 @@ class WindowsAgent(BaseAgent):
         elif command_key == 'kill_process':
             try:
                 pid = int(payload.get('pid'))
+                if not pid: return "Error: No PID provided"
                 p = psutil.Process(pid)
                 p.terminate()
                 return f"✅ Successfully terminated process {pid}"
@@ -121,6 +125,8 @@ class WindowsAgent(BaseAgent):
 
 class LinuxAgent(BaseAgent):
     def execute_command(self, command_key, payload=None):
+        # FIX: Ensure payload is always a dictionary to prevent crashes
+        if payload is None: payload = {}
         if command_key == 'ping_google':
             return self._run_safe(['ping', '-c', '4', '8.8.8.8'])
         elif command_key == 'check_logs':
@@ -142,6 +148,7 @@ class LinuxAgent(BaseAgent):
         elif command_key == 'kill_process':
             try:
                 pid = int(payload.get('pid'))
+                if not pid: return "Error: No PID provided"
                 p = psutil.Process(pid)
                 p.terminate()
                 return f"✅ Successfully terminated process {pid}"
@@ -155,17 +162,22 @@ class OPNsenseAgent(LinuxAgent):
         self.api_key = config.get('opnsense_key')
         self.api_secret = config.get('opnsense_secret')
         self.api_url = config.get('opnsense_url')
+        
+        # FIX: Create a persistent session to handle SSL and Connection Pooling
+        self.session = requests.Session()
+        self.session.auth = (self.api_key, self.api_secret)
+        self.session.verify = False # Ignore SSL errors for self-signed certs
 
     def execute_command(self, command_key, payload=None):
+        if payload is None: payload = {}
+
         if command_key == 'check_logs' or command_key == 'get_logs':
-            # REAL API CALL with SSL Verify Disabled
             try:
-                # OPNsense firewall log endpoint
                 endpoint = f'{self.api_url}/diagnostics/log/core/firewall'
-                res = requests.get(endpoint, auth=(self.api_key, self.api_secret), verify=False, timeout=5)
+                # Use 'self.session' instead of 'requests'
+                res = self.session.get(endpoint, timeout=5)
                 if res.status_code == 200:
-                    # Parse JSON response or return raw text
-                    return res.json()['rows'][:50] # Return last 50 logs
+                    return res.json()['rows'][:50]
                 return f"API Error {res.status_code}: {res.text}"
             except Exception as e:
                 return f"API Connection Failed: {e}"
@@ -173,9 +185,8 @@ class OPNsenseAgent(LinuxAgent):
         elif command_key == 'backup_config':
             try:
                 endpoint = f'{self.api_url}/core/backup/download'
-                res = requests.get(endpoint, auth=(self.api_key, self.api_secret), verify=False, stream=True)
+                res = self.session.get(endpoint, stream=True)
                 if res.status_code == 200:
-                    # In real app, upload this content to S3
                     return f"✅ Success: Downloaded {len(res.content)} bytes. (Ready to upload)"
                 return f"Backup Failed: {res.status_code}"
             except Exception as e:
@@ -183,16 +194,15 @@ class OPNsenseAgent(LinuxAgent):
 
         elif command_key == 'block_ip':
             try:
-                ip_to_block = payload.get('ip') if payload else None
+                ip_to_block = payload.get('ip')
                 if not ip_to_block:
                     return "Error: No IP specified"
                 
-                # Add to OPNsense Alias
                 alias_name = "ARUSHI_BLOCKLIST"
                 endpoint = f'{self.api_url}/firewall/alias_util/add/{alias_name}'
                 payload_data = {"address": ip_to_block}
                 
-                res = requests.post(endpoint, json=payload_data, auth=(self.api_key, self.api_secret), verify=False, timeout=5)
+                res = self.session.post(endpoint, json=payload_data, timeout=5)
                 
                 if res.status_code == 200:
                     return f"✅ Blocked IP: {ip_to_block}"
