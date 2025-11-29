@@ -2,11 +2,13 @@
 .env
 .env.local
 .env.*.local
+server/.env
 
 # Node.js
 node_modules/
 npm-debug.log
 yarn-error.log
+dist
 
 # Python
 __pycache__/
