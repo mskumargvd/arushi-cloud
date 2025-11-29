@@ -3,8 +3,8 @@ const http = require('http');
 const { Server } = require('socket.io');
 const { createClient } = require('redis');
 const { PrismaClient } = require('@prisma/client');
+const path = require('path');
 
-// At the top of server.js
 const { Resend } = require('resend');
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -311,20 +311,34 @@ app.get('/api/version', (req, res) => {
 });
 
 app.get('/download/agent', (req, res) => {
-    // In a real app, this would serve the correct binary/script for the OS
-    // For now, we just serve the main.py file itself as a demo
-    const file = path.join(__dirname, '../agent.py');
-    res.download(file);
+    // Look inside the local 'downloads' folder
+    const file = path.join(__dirname, 'downloads', 'agent.py');
+    res.download(file, (err) => {
+        if (err) {
+            console.error("File missing:", file);
+            res.status(404).send("Agent file not found");
+        }
+    });
 });
 
 app.get('/download/install.sh', (req, res) => {
-    const file = path.join(__dirname, '../install.sh');
-    res.download(file);
+    const file = path.join(__dirname, 'downloads', 'install.sh');
+    res.download(file, (err) => {
+        if (err) {
+            console.error("File missing:", file);
+            res.status(404).send("Installer not found");
+        }
+    });
 });
 
 app.get('/download/install.ps1', (req, res) => {
-    const file = path.join(__dirname, '../install.ps1');
-    res.download(file);
+    const file = path.join(__dirname, 'downloads', 'install.ps1');
+    res.download(file, (err) => {
+        if (err) {
+            console.error("File missing:", file);
+            res.status(404).send("Installer not found");
+        }
+    });
 });
 
 // Historical Stats API
