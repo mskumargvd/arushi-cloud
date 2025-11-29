@@ -34,7 +34,7 @@ model Agent {
 
 model AgentStat {
   id        Int      @id @default(autoincrement())
-  agent     Agent    @relation(fields: [agent_id], references: [id])
+  agent     Agent    @relation(fields: [agent_id], references: [id], onDelete: Cascade)
   agent_id  String
   cpu       Float
   ram       Float
