@@ -19,6 +19,8 @@ config = {}
 
 def load_config():
     global config
+    save_needed = False
+
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, 'r') as f:
             config = json.load(f)
@@ -34,6 +36,13 @@ def load_config():
             config['opnsense_secret'] = input("Enter OPNsense API Secret: ").strip()
             config['opnsense_url'] = 'https://localhost/api'
         
+        # --- THE FIX: PERSISTENT AGENT ID ---
+    if 'agent_id' not in config:
+        config['agent_id'] = str(uuid.uuid4())
+        print(f"🆔 Generated New Agent ID: {config['agent_id']}")
+        save_needed = True
+
+    if save_needed:
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f)
             print("✅ Configuration saved! Starting agent...\n")
@@ -43,7 +52,7 @@ load_config()
 
 SERVER_URL = config.get('server_url')
 API_KEY = config.get('api_key')
-AGENT_ID = str(uuid.uuid4()) # In production, save this ID to config too so it doesn't change on reboot
+AGENT_ID = config.get('agent_id') # <--- Now it loads the saved ID!
 
 # Logging Setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
