@@ -4,6 +4,8 @@ const { Server } = require('socket.io');
 const { createClient } = require('redis');
 const { PrismaClient } = require('@prisma/client');
 
+const nodemailer = require('nodemailer'); // Make sure you installed this: npm install nodemailer
+
 const disconnectTimers = new Map(); // Store timers for grace periods
 require('dotenv').config();
 
@@ -264,20 +266,45 @@ io.on('connection', (socket) => {
     });
 });
 
-function sendAlert(agentId, type) {
+async function sendAlert(agentId, type) {
     const timestamp = new Date().toISOString();
-    const subject = `[ALERT] Agent ${agentId} is ${type.toUpperCase()}`;
-    const body = `Critical Alert: The agent ${agentId} has gone ${type} at ${timestamp}. Please investigate immediately.`;
+    const subject = `[CRITICAL] Agent ${agentId} is ${type.toUpperCase()}`;
 
-    // SIMULATED EMAIL SENDING
-    console.log('\n==================================================');
-    console.log('📧 SENDING EMAIL ALERT...');
-    console.log(`To: santosh.m@agnidhra-technologies.com`);
-    console.log(`Subject: ${subject}`);
-    console.log(`Body: ${body}`);
-    console.log('==================================================\n');
+    // 1. Configure the "Sender" (Rajesh)
+    const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+            user: process.env.EMAIL_USER, // rajesh.rv.varma@gmail.com
+            pass: process.env.EMAIL_PASS  // The App Password
+        }
+    });
 
-    createLog(agentId, 'alert', `Agent ${type.toUpperCase()}`, 'error');
+    // 2. Configure the Email
+    const mailOptions = {
+        from: '"Arushi Cloud Watchdog" <rajesh.rv.varma@gmail.com>',
+        to: 'santosh.m@agnidhra-technologies.com', // <--- ALERTS GO TO YOU
+        subject: subject,
+        html: `
+            <div style="font-family: sans-serif; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px;">
+                <h2 style="color: #ef4444;">🚨 Security Alert</h2>
+                <p><strong>Device ID:</strong> ${agentId}</p>
+                <p><strong>Status:</strong> <span style="background: #fee2e2; color: #b91c1c; padding: 5px 10px; rounded: 5px; font-weight: bold;">${type.toUpperCase()}</span></p>
+                <p><strong>Time:</strong> ${timestamp}</p>
+                <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+                <p style="color: #64748b; font-size: 12px;">Sent via Arushi Cloud Agent</p>
+            </div>
+        `
+    };
+
+    // 3. Send
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log(`✅ Email sent from Rajesh to Admin regarding ${agentId}`);
+        createLog(agentId, 'alert', `Email Alert Sent: ${type.toUpperCase()}`, 'success');
+    } catch (error) {
+        console.error('❌ Failed to send email:', error);
+        // Don't crash the server if email fails
+    }
 }
 
 async function createLog(agentId, type, message, status) {
