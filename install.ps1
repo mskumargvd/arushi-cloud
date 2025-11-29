@@ -1,54 +1,78 @@
-# Arushi Cloud Agent Installer (Windows)
-$SERVER_URL = "https://arushi-cloud-server-v1.onrender.com" # TODO: Replace with Render URL
-$AGENT_DIR = "C:\ArushiAgent"
-$AGENT_URL = "$SERVER_URL/download/agent"
+# Arushi Cloud - Universal Windows Installer
+# Usage: powershell -Command "..." -Key "YOUR_KEY"
 
-Write-Host "--- Arushi Cloud Agent Installer ---" -ForegroundColor Green
+param (
+    [string]$Key = ""
+)
 
-# 1. Check Admin
-if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Write-Host "Please run as Administrator!" -ForegroundColor Red
+$ServerUrl = "https://arushi-cloud-server-v1.onrender.com"
+$InstallDir = "C:\ArushiAgent"
+$AgentUrl = "$ServerUrl/download/agent"
+
+Write-Host "--- 🚀 Installing Arushi Cloud Agent ---" -ForegroundColor Cyan
+
+# 1. Check Administrator Privileges
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
+if (-not $isAdmin) {
+    Write-Host "❌ Error: Please run PowerShell as Administrator" -ForegroundColor Red
     exit
 }
 
 # 2. Setup Directory
-if (!(Test-Path -Path $AGENT_DIR)) {
-    New-Item -ItemType Directory -Force -Path $AGENT_DIR | Out-Null
+if (!(Test-Path -Path $InstallDir)) {
+    New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 }
-Set-Location $AGENT_DIR
+Set-Location $InstallDir
 
-# 3. Install Python (if missing)
+# 3. Check & Install Python (Smart Fallback)
 if (!(Get-Command python -ErrorAction SilentlyContinue)) {
-    Write-Host "Python not found. Installing via Winget..." -ForegroundColor Yellow
+    Write-Host "⚠️ Python not found. Installing via Winget..." -ForegroundColor Yellow
     winget install -e --id Python.Python.3.11 --scope machine --accept-package-agreements --accept-source-agreements
-    # Refresh env vars
+    
+    # Refresh Environment Variables so we can use 'python' immediately
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 }
 
-# 4. Download Agent
-Write-Host "Downloading Agent..."
-Invoke-WebRequest -Uri $AGENT_URL -OutFile "agent.py"
+# 4. Download Agent Code
+Write-Host "⬇️ Downloading Agent Script..."
+try {
+    Invoke-WebRequest -Uri $AgentUrl -OutFile "agent.py"
+} catch {
+    Write-Host "❌ Failed to download agent. Check Server URL." -ForegroundColor Red
+    exit
+}
 
-# 5. Install Libs
-Write-Host "Installing Dependencies..."
-pip install python-socketio[client] psutil requests urllib3
+# 5. Install Python Dependencies
+Write-Host "📦 Installing Libraries..." -ForegroundColor Yellow
+pip install python-socketio[client] websocket-client psutil requests urllib3
 
 # 6. Configure
-$API_KEY = Read-Host "Enter your Agent API Key"
-$config = @{
-    server_url = $SERVER_URL
-    api_key = $API_KEY
+if ([string]::IsNullOrEmpty($Key)) {
+    $Key = Read-Host "Enter Agent Secret Key"
 }
-$config | ConvertTo-Json | Set-Content "agent_config.json"
 
-# 7. Create Scheduled Task (Simpler than Service for Python)
-Write-Host "Creating Background Task..."
-$Action = New-ScheduledTaskAction -Execute "python" -Argument "$AGENT_DIR\agent.py"
+$ConfigContent = @"
+{
+    "server_url": "$ServerUrl",
+    "api_key": "$Key",
+    "agent_id": "$([guid]::NewGuid())"
+}
+"@
+Set-Content -Path "agent_config.json" -Value $ConfigContent
+
+# 7. Create Persistence (Scheduled Task)
+Write-Host "⚙️ Creating Background Task..."
+$Action = New-ScheduledTaskAction -Execute "pythonw" -Argument "$InstallDir\agent.py"
 $Trigger = New-ScheduledTaskTrigger -AtStartup
 $Principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-Register-ScheduledTask -TaskName "ArushiAgent" -Action $Action -Trigger $Trigger -Principal $Principal -Force
 
-Write-Host "Starting Agent..."
+# Unregister old task if exists
+Unregister-ScheduledTask -TaskName "ArushiAgent" -Confirm:$false -ErrorAction SilentlyContinue
+
+# Register new task
+Register-ScheduledTask -TaskName "ArushiAgent" -Action $Action -Trigger $Trigger -Principal $Principal -Force | Out-Null
+
+# Start it now
 Start-ScheduledTask -TaskName "ArushiAgent"
 
-Write-Host "✅ Installation Complete!" -ForegroundColor Green
+Write-Host "✅ Installation Complete! Agent running in background." -ForegroundColor Green

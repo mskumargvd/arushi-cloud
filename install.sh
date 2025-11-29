@@ -1,92 +1,111 @@
 #!/bin/bash
 
-# Arushi Cloud Agent Installer
-# Supports: Linux (Systemd) and FreeBSD/OPNsense (RC.d)
+# --- Arushi Cloud Universal Installer (Linux/BSD) ---
+# Usage: curl ... | sudo bash -s -- --key=YOUR_KEY
 
-SERVER_URL="https://arushi-cloud-server-v1.onrender.com" # TODO: Replace with Render URL in Prod
-AGENT_DIR="/opt/arushi-agent"
-AGENT_URL="$SERVER_URL/download/agent"
+SERVER_URL="https://arushi-cloud-server-v1.onrender.com"
+INSTALL_DIR="/opt/arushi-agent"
+SERVICE_NAME="arushi-agent"
 
 # Colors
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${GREEN}--- Arushi Cloud Agent Installer ---${NC}"
+echo -e "${GREEN}🚀 Starting Arushi Agent Installation...${NC}"
 
-# 1. Detect OS
+# 1. Parse Arguments (The "One-Line" Magic)
+API_KEY=""
+for i in "$@"
+do
+case $i in
+    --key=*)
+    API_KEY="${i#*=}"
+    shift
+    ;;
+esac
+done
+
+# 2. Check Root
+if [ "$EUID" -ne 0 ]; then 
+  echo -e "${RED}Error: Please run as root (sudo)${NC}"
+  exit 1
+fi
+
+# 3. Detect OS
 OS="$(uname -s)"
 echo "Detected OS: $OS"
 
-# 2. Install Dependencies
+# 4. Install Dependencies
+echo "📦 Installing Dependencies..."
 if [ "$OS" = "Linux" ]; then
-    if [ -f /etc/debian_version ]; then
-        echo "Installing Python & Pip (Debian/Ubuntu)..."
+    if command -v apt-get &> /dev/null; then
         apt-get update -qq
         apt-get install -y python3 python3-pip python3-venv -qq
-    elif [ -f /etc/redhat-release ]; then
-        echo "Installing Python & Pip (RHEL/CentOS)..."
+    elif command -v yum &> /dev/null; then
         yum install -y python3 python3-pip
     fi
 elif [ "$OS" = "FreeBSD" ]; then
-    echo "Installing Python (FreeBSD/OPNsense)..."
-    pkg install -y python3 py39-psutil py39-requests py39-urllib3
+    # OPNsense/FreeBSD
+    pkg install -y python3 py311-psutil py311-requests py311-urllib3
 fi
 
-# 3. Setup Directory
-echo "Setting up agent directory at $AGENT_DIR..."
-mkdir -p "$AGENT_DIR"
-cd "$AGENT_DIR"
+# 5. Setup Directory & Download
+echo "📂 Setting up $INSTALL_DIR..."
+mkdir -p "$INSTALL_DIR"
+cd "$INSTALL_DIR"
 
-# 4. Download Agent
-echo "Downloading Agent..."
-curl -sL "$AGENT_URL" -o agent.py
+echo "⬇️ Downloading Agent..."
+curl -sL "$SERVER_URL/download/agent" -o agent.py
 
-# 5. Setup Virtual Env (Linux Only - FreeBSD uses system packages usually)
+# 6. Python Environment Setup
 if [ "$OS" = "Linux" ]; then
-    echo "Creating Virtual Environment..."
-    python3 -m venv venv
+    # Linux needs a venv to avoid messing with system python
+    if [ ! -d "venv" ]; then
+        echo "Creating Python Virtual Environment..."
+        python3 -m venv venv
+    fi
     source venv/bin/activate
-    echo "Installing Python Libs..."
-    pip install python-socketio[client] psutil requests urllib3
+    echo "Installing Python Libraries..."
+    pip install python-socketio[client] websocket-client psutil requests urllib3
+    PYTHON_EXEC="$INSTALL_DIR/venv/bin/python"
+elif [ "$OS" = "FreeBSD" ]; then
+    # FreeBSD/OPNsense uses system python packages we installed earlier
+    PYTHON_EXEC="/usr/local/bin/python3"
 fi
 
-# 6. Configure
-API_KEY=""
-while [[ -z "$API_KEY" ]]; do
-    read -p "Enter your Agent API Key: " API_KEY
-done
+# 7. Configure Agent
+if [ -z "$API_KEY" ]; then
+    echo -e "${RED}⚠️ No API Key provided in arguments.${NC}"
+    read -p "Enter Agent Secret Key: " API_KEY
+fi
 
-cat > agent_config.json <<EOF
-{
-    "server_url": "$SERVER_URL",
-    "api_key": "$API_KEY"
-}
-EOF
-
-# OPNsense Specific Config
+# Check for OPNsense specific config
+OPN_CONFIG=""
 if [ "$OS" = "FreeBSD" ]; then
-    echo -e "${GREEN}OPNsense Detected!${NC}"
-    read -p "Enter OPNsense API Key: " OPN_KEY
-    read -p "Enter OPNsense API Secret: " OPN_SECRET
-    
-    # Update config using jq or simple sed (since we just wrote it)
-    # Re-writing for simplicity
+    # Optional: If on OPNsense, we can ask for local API keys for full features
+    # For automated install, we skip this and let user edit later if they want blocking features
+    # Or you can add logic here to ask if interactive.
+    echo "Creating OPNsense compatible config..."
+    OPN_CONFIG=", \"opnsense_url\": \"https://localhost/api\""
+fi
+
+echo "📝 Creating Configuration..."
 cat > agent_config.json <<EOF
 {
     "server_url": "$SERVER_URL",
     "api_key": "$API_KEY",
-    "opnsense_key": "$OPN_KEY",
-    "opnsense_secret": "$OPN_SECRET",
-    "opnsense_url": "https://localhost/api"
+    "agent_id": "$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || echo 'manual-id')"
+    $OPN_CONFIG
 }
 EOF
-fi
 
-# 7. Create Service
+# 8. Create & Start Service
+echo "⚙️ Configuring Startup Service..."
+
 if [ "$OS" = "Linux" ]; then
-    echo "Creating Systemd Service..."
-    cat > /etc/systemd/system/arushi-agent.service <<EOF
+    # Systemd (Ubuntu/Debian/CentOS)
+    cat > /etc/systemd/system/$SERVICE_NAME.service <<EOF
 [Unit]
 Description=Arushi Cloud Agent
 After=network.target
@@ -94,8 +113,8 @@ After=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=$AGENT_DIR
-ExecStart=$AGENT_DIR/venv/bin/python $AGENT_DIR/agent.py
+WorkingDirectory=$INSTALL_DIR
+ExecStart=$PYTHON_EXEC $INSTALL_DIR/agent.py
 Restart=always
 RestartSec=10
 
@@ -103,11 +122,11 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
     systemctl daemon-reload
-    systemctl enable arushi-agent
-    systemctl restart arushi-agent
+    systemctl enable $SERVICE_NAME
+    systemctl restart $SERVICE_NAME
 
 elif [ "$OS" = "FreeBSD" ]; then
-    echo "Creating RC.d Service..."
+    # RC.d (OPNsense/FreeBSD)
     cat > /usr/local/etc/rc.d/arushi-agent <<EOF
 #!/bin/sh
 # PROVIDE: arushi_agent
@@ -118,8 +137,8 @@ elif [ "$OS" = "FreeBSD" ]; then
 
 name="arushi_agent"
 rcvar="arushi_agent_enable"
-command="/usr/local/bin/python3"
-command_args="$AGENT_DIR/agent.py &"
+command="$PYTHON_EXEC"
+command_args="$INSTALL_DIR/agent.py &"
 pidfile="/var/run/arushi_agent.pid"
 
 load_rc_config \$name
@@ -127,7 +146,7 @@ run_rc_command "\$1"
 EOF
     chmod +x /usr/local/etc/rc.d/arushi-agent
     sysrc arushi_agent_enable="YES"
-    service arushi-agent start
+    service arushi-agent restart
 fi
 
-echo -e "${GREEN}✅ Installation Complete! Agent is running.${NC}"
+echo -e "${GREEN}✅ Success! Agent is running and connected.${NC}"
