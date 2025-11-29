@@ -313,17 +313,17 @@ app.get('/api/version', (req, res) => {
 app.get('/download/agent', (req, res) => {
     // In a real app, this would serve the correct binary/script for the OS
     // For now, we just serve the main.py file itself as a demo
-    const file = __dirname + '/../agent/agent.py';
+    const file = path.join(__dirname, '../agent.py');
     res.download(file);
 });
 
 app.get('/download/install.sh', (req, res) => {
-    const file = __dirname + '/../install.sh';
+    const file = path.join(__dirname, '../install.sh');
     res.download(file);
 });
 
 app.get('/download/install.ps1', (req, res) => {
-    const file = __dirname + '/../install.ps1';
+    const file = path.join(__dirname, '../install.ps1');
     res.download(file);
 });
 
