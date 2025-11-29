@@ -314,6 +314,26 @@ app.get('/api/stats/history/:agentId', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch history' });
     }
 });
+
+// Get Activity Logs
+app.get('/api/logs', async (req, res) => {
+    try {
+        const logs = await prisma.log.findMany({
+            take: 100,
+            orderBy: { timestamp: 'desc' },
+            include: {
+                agent: {
+                    select: { hostname: true }
+                }
+            }
+        });
+        res.json(logs);
+    } catch (e) {
+        console.error('Error fetching logs:', e);
+        res.status(500).json({ error: 'Failed to fetch logs' });
+    }
+});
+
 async function startServer() {
     try {
         await prisma.$connect();
