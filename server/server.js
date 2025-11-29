@@ -5,11 +5,15 @@ const { createClient } = require('redis');
 const { PrismaClient } = require('@prisma/client');
 require('dotenv').config();
 
+const cors = require('cors'); // Add this dependency if missing, or use manual headers
+
 const app = express();
+app.use(cors()); // Enable CORS for all routes
+
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "*", // TODO: Restrict in production
+        origin: "*",
         methods: ["GET", "POST"]
     }
 });
@@ -17,42 +21,72 @@ const io = new Server(server, {
 // Prisma Client
 const prisma = new PrismaClient();
 
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-jwt-key';
+
 // Middleware for authentication
 io.use((socket, next) => {
     const token = socket.handshake.auth.token;
-    // Allow dashboard to connect without token for now (or implement separate auth)
-    // For simplicity, we check if it's an agent trying to register
-    // Ideally, dashboard should also have auth
 
-    // If it's a dashboard connection (we can distinguish by some handshake field or just allow all for now and filter in logic)
-    // But here we want to secure AGENTS.
-
-    // Let's enforce token for everyone, but Dashboard might need a way to pass it.
-    // For Phase 1, let's assume Dashboard doesn't send auth yet, so we might break it if we enforce globally.
-    // So we check: if it claims to be an agent, it MUST have a token.
-
-    // Actually, the socket doesn't "claim" to be an agent until it emits 'register_agent'.
-    // So we can't easily filter here unless we enforce it for ALL connections.
-
-    // Let's enforce for ALL. Dashboard will need update.
+    // 1. Check if it's an Agent (using API Key)
     if (token === process.env.AGENT_SECRET_KEY) {
-        next();
-    } else {
-        // Temporary: Allow dashboard if it doesn't send token? 
-        // No, "Zero to Production" says Secure Core.
-        // Let's hardcode a separate DASHBOARD_KEY or just use the same for now.
-        // Or, we can check if token is missing, maybe it's a dashboard?
-        // Risk: Rogue agent connects as dashboard.
+        socket.data.type = 'agent';
+        return next();
+    }
 
-        // Better approach:
-        // Agents MUST send token.
-        if (token === process.env.AGENT_SECRET_KEY) {
-            next();
-        } else {
-            const err = new Error("not authorized");
-            err.data = { content: "Please retry later" }; // additional details
-            next(err);
-        }
+    // 2. Check if it's a User (using JWT)
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        socket.data.type = 'dashboard';
+        socket.data.userId = decoded.userId;
+        return next();
+    } catch (err) {
+        // Allow unauthenticated dashboard for Login page (handled by client logic usually, but socket connects after login)
+        // Actually, if socket connects BEFORE login, we must allow it or handle it.
+        // For this app, we only connect socket AFTER login.
+
+        // HOWEVER: For the "Zero to Production" flow, we might have legacy connections.
+        // Let's return error if neither matches.
+        const error = new Error("not authorized");
+        error.data = { content: "Invalid credentials" };
+        return next(error);
+    }
+});
+
+// --- AUTH API ---
+app.use(express.json()); // Enable JSON body parsing
+
+app.post('/api/register', async (req, res) => {
+    const { email, password } = req.body;
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const user = await prisma.user.create({
+            data: {
+                email,
+                password_hash: hashedPassword
+            }
+        });
+        res.json({ message: 'User created', userId: user.id });
+    } catch (e) {
+        res.status(400).json({ error: 'User already exists' });
+    }
+});
+
+app.post('/api/login', async (req, res) => {
+    const { email, password } = req.body;
+    try {
+        const user = await prisma.user.findUnique({ where: { email } });
+        if (!user) return res.status(400).json({ error: 'User not found' });
+
+        const valid = await bcrypt.compare(password, user.password_hash);
+        if (!valid) return res.status(400).json({ error: 'Invalid password' });
+
+        const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+        res.json({ token, user: { id: user.id, email: user.email } });
+    } catch (e) {
+        res.status(500).json({ error: 'Login failed' });
     }
 });
 
@@ -78,7 +112,7 @@ io.on('connection', (socket) => {
         // Persist to DB
         try {
             // Find the default admin user (for single tenant mode)
-            const admin = await prisma.user.findUnique({ where: { email: 'admin@arushi.cloud' } });
+            const admin = await prisma.user.findUnique({ where: { email: 'santosh.m@agnidhra-technologies.com' } });
 
             if (admin) {
                 await prisma.agent.upsert({
@@ -119,11 +153,11 @@ io.on('connection', (socket) => {
 
     // Command routing: Dashboard -> Agent
     socket.on('send_command', (data) => {
-        const { agentId, command } = data;
+        const { agentId, command, payload } = data;
         const agentData = agents.get(agentId);
 
         if (agentData && agentData.socketId) {
-            io.to(agentData.socketId).emit('execute_command', { command, id: socket.id }); // Pass dashboard socket ID to reply back
+            io.to(agentData.socketId).emit('execute_command', { command, payload, id: socket.id }); // Pass dashboard socket ID to reply back
             console.log(`Command sent to agent ${agentId}: ${command}`);
         } else {
             console.log(`Agent ${agentId} not found`);
@@ -206,8 +240,17 @@ io.on('connection', (socket) => {
 });
 
 function sendAlert(agentId, type) {
-    console.log(`[ALERT] Agent ${agentId} is ${type.toUpperCase()}! Sending email to admin...`);
-    // TODO: Integrate SendGrid/Resend here
+    const timestamp = new Date().toISOString();
+    const subject = `[ALERT] Agent ${agentId} is ${type.toUpperCase()}`;
+    const body = `Critical Alert: The agent ${agentId} has gone ${type} at ${timestamp}. Please investigate immediately.`;
+
+    // SIMULATED EMAIL SENDING
+    console.log('\n==================================================');
+    console.log('📧 SENDING EMAIL ALERT...');
+    console.log(`To: santosh.m@agnidhra-technologies.com`);
+    console.log(`Subject: ${subject}`);
+    console.log(`Body: ${body}`);
+    console.log('==================================================\n');
 }
 
 const PORT = process.env.PORT || 3000;
@@ -224,6 +267,16 @@ app.get('/download/agent', (req, res) => {
     // In a real app, this would serve the correct binary/script for the OS
     // For now, we just serve the main.py file itself as a demo
     const file = __dirname + '/../agent/agent.py';
+    res.download(file);
+});
+
+app.get('/download/install.sh', (req, res) => {
+    const file = __dirname + '/../install.sh';
+    res.download(file);
+});
+
+app.get('/download/install.ps1', (req, res) => {
+    const file = __dirname + '/../install.ps1';
     res.download(file);
 });
 

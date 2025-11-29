@@ -1,11 +1,17 @@
+
 import { useState, useEffect } from 'react';
 import io from 'socket.io-client';
-import { Terminal, Activity, Server, Shield, Cpu, HardDrive, Clock, ChevronRight, Command, LayoutDashboard, Settings, Bell, Search, Lock, LogOut } from 'lucide-react';
+import { Terminal, Activity, Server, Shield, Cpu, HardDrive, Clock, ChevronRight, Command, LayoutDashboard, Settings, Bell, Search, Lock, LogOut, Plus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import HistoricalChart from './components/HistoricalChart'; // Ensure you have this file
 import CommandCenter from './components/CommandCenter'; // Ensure you have this file
 import ActivityLogs from './components/ActivityLogs';
 import SettingsView from './components/Settings';
+import AddDeviceWizard from './components/AddDeviceWizard';
+import SecurityScore from './components/SecurityScore';
+import FirewallControls from './components/FirewallControls';
+import Backups from './components/Backups';
+import LiveLogs from './components/LiveLogs';
 
 // --- CONFIG ---
 // YOUR RENDER URL GOES HERE
@@ -16,30 +22,33 @@ const SERVER_URL = 'https://arushi-cloud-server-v1.onrender.com';
 function App() {
   // --- STATE ---
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
   const [socket, setSocket] = useState(null);
   const [agents, setAgents] = useState([]);
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [currentView, setCurrentView] = useState('overview'); // 'overview', 'agents', 'logs', 'settings'
+  const [showAddDevice, setShowAddDevice] = useState(false);
 
   // --- 1. LOGIN & SOCKET SETUP ---
   useEffect(() => {
-    const savedAuth = localStorage.getItem('arushi_auth');
-    if (savedAuth === 'true') {
+    const token = localStorage.getItem('arushi_token');
+    if (token) {
       setIsAuthenticated(true);
-      initSocket();
+      initSocket(token);
     }
   }, []);
 
-  const initSocket = () => {
+  const initSocket = (token) => {
     // Prevent multiple connections
     if (socket?.connected) return;
 
     const newSocket = io(SERVER_URL, {
       autoConnect: true,
       transports: ['websocket'],
-      auth: { token: 'my_super_secret_key_12345' } // Dashboard Key
+      auth: { token: token }
     });
 
     newSocket.on('connect', () => {
@@ -48,6 +57,15 @@ function App() {
     });
 
     newSocket.on('disconnect', () => setIsConnected(false));
+
+    // Auth Error Handling
+    newSocket.on('connect_error', (err) => {
+      console.error("Socket Auth Error:", err.message);
+      if (err.message === "not authorized") {
+        handleLogout();
+        alert("Session expired. Please login again.");
+      }
+    });
 
     // Listen for Agent Events
     newSocket.on('agent_list', (list) => {
@@ -72,19 +90,36 @@ function App() {
     setSocket(newSocket);
   };
 
-  const handleLogin = (e) => {
+  const handleAuth = async (e) => {
     e.preventDefault();
-    if (passwordInput === 'admin123') { // Change this password!
-      localStorage.setItem('arushi_auth', 'true');
-      setIsAuthenticated(true);
-      initSocket();
-    } else {
-      alert('Invalid Password');
+    const endpoint = isRegistering ? '/api/register' : '/api/login';
+
+    try {
+      const res = await fetch(`${SERVER_URL}${endpoint} `, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailInput, password: passwordInput })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || 'Auth failed');
+
+      if (isRegistering) {
+        alert('Registration successful! Please login.');
+        setIsRegistering(false);
+      } else {
+        localStorage.setItem('arushi_token', data.token);
+        setIsAuthenticated(true);
+        initSocket(data.token);
+      }
+    } catch (err) {
+      alert(err.message);
     }
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('arushi_auth');
+    localStorage.removeItem('arushi_token');
     setIsAuthenticated(false);
     if (socket) socket.disconnect();
     setSocket(null);
@@ -102,11 +137,25 @@ function App() {
             </div>
           </div>
           <h2 className="text-2xl font-bold text-center mb-2">Arushi Cloud</h2>
-          <p className="text-slate-400 text-center mb-8">Enterprise Security Console</p>
+          <p className="text-slate-400 text-center mb-8">{isRegistering ? 'Create Admin Account' : 'Enterprise Security Console'}</p>
 
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleAuth} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">Admin Password</label>
+              <label className="block text-sm font-medium text-slate-400 mb-1">Email Address</label>
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
+                <input
+                  type="email"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2.5 pl-10 pr-4 focus:outline-none focus:border-blue-500 transition-colors"
+                  placeholder="santosh.m@agnidhra-technologies.com"
+                  required
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-400 mb-1">Password</label>
               <div className="relative">
                 <Lock className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
                 <input
@@ -115,13 +164,23 @@ function App() {
                   onChange={(e) => setPasswordInput(e.target.value)}
                   className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2.5 pl-10 pr-4 focus:outline-none focus:border-blue-500 transition-colors"
                   placeholder="••••••••"
+                  required
                 />
               </div>
             </div>
             <button className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition-colors shadow-lg shadow-blue-500/20">
-              Access Dashboard
+              {isRegistering ? 'Create Account' : 'Access Dashboard'}
             </button>
           </form>
+
+          <div className="mt-6 text-center">
+            <button
+              onClick={() => setIsRegistering(!isRegistering)}
+              className="text-sm text-slate-400 hover:text-blue-400 transition-colors"
+            >
+              {isRegistering ? 'Already have an account? Login' : 'Need an account? Register'}
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -130,6 +189,7 @@ function App() {
   // --- 3. RENDER MAIN DASHBOARD ---
   return (
     <div className="flex h-screen bg-[#0f172a] text-slate-200 font-sans overflow-hidden">
+      <AddDeviceWizard isOpen={showAddDevice} onClose={() => setShowAddDevice(false)} />
 
       {/* SIDEBAR */}
       <div className="w-64 bg-[#1e293b] border-r border-slate-700 flex flex-col z-20">
@@ -162,10 +222,17 @@ function App() {
         </nav>
 
         <div className="p-4 border-t border-slate-700/50">
+          <button
+            onClick={() => setShowAddDevice(true)}
+            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 rounded-lg flex items-center justify-center space-x-2 transition-colors shadow-lg shadow-blue-500/20 mb-3"
+          >
+            <Plus size={18} />
+            <span>Add Device</span>
+          </button>
           <div className="bg-slate-800/50 rounded-lg p-3 mb-2">
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs text-slate-400 font-medium">Server Status</span>
-              <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-red-500 animate-pulse'}`} />
+              <span className={`w - 2 h - 2 rounded - full ${isConnected ? 'bg-emerald-500' : 'bg-red-500 animate-pulse'} `} />
             </div>
             <div className="text-xs text-slate-500 truncate">{SERVER_URL.replace('https://', '')}</div>
           </div>
@@ -212,23 +279,28 @@ function App() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+                  className="space-y-8"
                 >
-                  {agents.length === 0 ? (
-                    <div className="col-span-full text-center py-20 text-slate-500">
-                      <Server className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                      <p>No agents connected.</p>
-                      <p className="text-xs mt-2">Run the python script on your machine to connect.</p>
-                    </div>
-                  ) : (
-                    agents.map(agent => (
-                      <AgentCard
-                        key={agent.id}
-                        agent={agent}
-                        onClick={() => setSelectedAgent(agent)}
-                      />
-                    ))
-                  )}
+
+
+                  <h2 className="text-xl font-bold text-white">Connected Agents</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {agents.length === 0 ? (
+                      <div className="col-span-full text-center py-20 text-slate-500">
+                        <Server className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                        <p>No agents connected.</p>
+                        <p className="text-xs mt-2">Run the python script on your machine to connect.</p>
+                      </div>
+                    ) : (
+                      agents.map(agent => (
+                        <AgentCard
+                          key={agent.id}
+                          agent={agent}
+                          onClick={() => setSelectedAgent(agent)}
+                        />
+                      ))
+                    )}
+                  </div>
                 </motion.div>
               ) : (
                 /* --- AGENT DETAIL VIEW --- */
@@ -247,11 +319,16 @@ function App() {
                   </button>
 
                   {/* Top Stats Row */}
-                  <div className="grid grid-cols-4 gap-4">
-                    <StatBig label="CPU Load" value={`${selectedAgent.stats?.cpu || 0}%`} icon={<Cpu />} color="text-purple-400" />
-                    <StatBig label="Memory" value={`${selectedAgent.stats?.ram || 0}%`} icon={<HardDrive />} color="text-emerald-400" />
-                    <StatBig label="Disk" value={`${selectedAgent.stats?.disk || 0}%`} icon={<Server />} color="text-blue-400" />
-                    <StatBig label="Uptime" value={`${selectedAgent.stats?.uptime || 0}h`} icon={<Clock />} color="text-orange-400" />
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-1">
+                      <SecurityScore agents={[selectedAgent]} />
+                    </div>
+                    <div className="lg:col-span-2 grid grid-cols-4 gap-4">
+                      <StatBig label="CPU Load" value={`${selectedAgent.stats?.cpu || 0}% `} icon={<Cpu />} color="text-purple-400" />
+                      <StatBig label="Memory" value={`${selectedAgent.stats?.ram || 0}% `} icon={<HardDrive />} color="text-emerald-400" />
+                      <StatBig label="Disk" value={`${selectedAgent.stats?.disk || 0}% `} icon={<Server />} color="text-blue-400" />
+                      <StatBig label="Uptime" value={`${selectedAgent.stats?.uptime || 0} h`} icon={<Clock />} color="text-orange-400" />
+                    </div>
                   </div>
 
                   {/* Middle Row: Charts & Terminal */}
@@ -266,6 +343,24 @@ function App() {
                       <CommandCenter agentId={selectedAgent.id} socket={socket} />
                     </div>
                   </div>
+
+                  {/* OPNsense Specific Modules */}
+                  {selectedAgent.platform === 'FreeBSD' && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2 }}
+                      className="space-y-6"
+                    >
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <FirewallControls agentId={selectedAgent.id} socket={socket} />
+                        <Backups agentId={selectedAgent.id} socket={socket} />
+                      </div>
+                      <div className="h-[400px]">
+                        <LiveLogs agentId={selectedAgent.id} socket={socket} />
+                      </div>
+                    </motion.div>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -281,8 +376,8 @@ function App() {
 const SidebarItem = ({ icon, label, active, onClick }) => (
   <button
     onClick={onClick}
-    className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-all ${active ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-      }`}
+    className={`w - full flex items - center space - x - 3 px - 3 py - 2 rounded - lg transition - all ${active ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+      } `}
   >
     {icon}
     <span className="font-medium text-sm">{label}</span>
@@ -297,7 +392,7 @@ const AgentCard = ({ agent, onClick }) => (
   >
     <div className="flex justify-between items-start mb-4">
       <div className="flex items-center space-x-3">
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${agent.platform === 'Windows' ? 'bg-blue-900/30 text-blue-400' : 'bg-orange-900/30 text-orange-400'}`}>
+        <div className={`w - 10 h - 10 rounded - lg flex items - center justify - center ${agent.platform === 'Windows' ? 'bg-blue-900/30 text-blue-400' : 'bg-orange-900/30 text-orange-400'} `}>
           {agent.platform === 'Windows' ? <Command size={20} /> : <Terminal size={20} />}
         </div>
         <div>
@@ -305,15 +400,15 @@ const AgentCard = ({ agent, onClick }) => (
           <p className="text-xs text-slate-500">{agent.id.slice(0, 12)}</p>
         </div>
       </div>
-      <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${agent.status === 'online' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+      <span className={`px - 2 py - 1 rounded text - [10px] font - bold uppercase ${agent.status === 'online' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'} `}>
         {agent.status || 'Offline'}
       </span>
     </div>
 
     <div className="grid grid-cols-3 gap-2 mt-4">
-      <StatMini label="CPU" value={`${agent.stats?.cpu || 0}%`} />
-      <StatMini label="RAM" value={`${agent.stats?.ram || 0}%`} />
-      <StatMini label="DISK" value={`${agent.stats?.disk || 0}%`} />
+      <StatMini label="CPU" value={`${agent.stats?.cpu || 0}% `} />
+      <StatMini label="RAM" value={`${agent.stats?.ram || 0}% `} />
+      <StatMini label="DISK" value={`${agent.stats?.disk || 0}% `} />
     </div>
   </motion.div>
 );
@@ -329,9 +424,9 @@ const StatBig = ({ label, value, icon, color }) => (
   <div className="bg-[#1e293b] p-6 rounded-xl border border-slate-700 flex items-center justify-between">
     <div>
       <p className="text-slate-500 text-xs font-bold uppercase mb-1">{label}</p>
-      <h3 className={`text-2xl font-mono font-bold ${color}`}>{value}</h3>
+      <h3 className={`text - 2xl font - mono font - bold ${color} `}>{value}</h3>
     </div>
-    <div className={`p-3 rounded-lg bg-slate-800 ${color} bg-opacity-10`}>
+    <div className={`p - 3 rounded - lg bg - slate - 800 ${color} bg - opacity - 10`}>
       {icon}
     </div>
   </div>

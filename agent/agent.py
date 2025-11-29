@@ -77,11 +77,11 @@ class BaseAgent:
         except Exception as e:
             return f"Execution Error: {e}"
 
-    def execute_command(self, command_key):
+    def execute_command(self, command_key, payload=None):
         return "Command not implemented"
 
 class WindowsAgent(BaseAgent):
-    def execute_command(self, command_key):
+    def execute_command(self, command_key, payload=None):
         if command_key == 'ping_google':
             return self._run_safe(['ping', '-n', '4', '8.8.8.8'])
         elif command_key == 'check_logs':
@@ -91,7 +91,7 @@ class WindowsAgent(BaseAgent):
         return f"Unknown command: {command_key}"
 
 class LinuxAgent(BaseAgent):
-    def execute_command(self, command_key):
+    def execute_command(self, command_key, payload=None):
         if command_key == 'ping_google':
             return self._run_safe(['ping', '-c', '4', '8.8.8.8'])
         elif command_key == 'check_logs':
@@ -107,8 +107,8 @@ class OPNsenseAgent(LinuxAgent):
         self.api_secret = config.get('opnsense_secret')
         self.api_url = config.get('opnsense_url')
 
-    def execute_command(self, command_key):
-        if command_key == 'check_logs':
+    def execute_command(self, command_key, payload=None):
+        if command_key == 'check_logs' or command_key == 'get_logs':
             # REAL API CALL with SSL Verify Disabled
             try:
                 # OPNsense firewall log endpoint
@@ -116,7 +116,7 @@ class OPNsenseAgent(LinuxAgent):
                 res = requests.get(endpoint, auth=(self.api_key, self.api_secret), verify=False, timeout=5)
                 if res.status_code == 200:
                     # Parse JSON response or return raw text
-                    return str(res.json()['rows'][:5]) # Return last 5 logs
+                    return res.json()['rows'][:50] # Return last 50 logs
                 return f"API Error {res.status_code}: {res.text}"
             except Exception as e:
                 return f"API Connection Failed: {e}"
@@ -132,7 +132,26 @@ class OPNsenseAgent(LinuxAgent):
             except Exception as e:
                 return f"Backup Error: {e}"
 
-        return super().execute_command(command_key)
+        elif command_key == 'block_ip':
+            try:
+                ip_to_block = payload.get('ip') if payload else None
+                if not ip_to_block:
+                    return "Error: No IP specified"
+                
+                # Add to OPNsense Alias
+                alias_name = "ARUSHI_BLOCKLIST"
+                endpoint = f'{self.api_url}/firewall/alias_util/add/{alias_name}'
+                payload_data = {"address": ip_to_block}
+                
+                res = requests.post(endpoint, json=payload_data, auth=(self.api_key, self.api_secret), verify=False, timeout=5)
+                
+                if res.status_code == 200:
+                    return f"✅ Blocked IP: {ip_to_block}"
+                return f"Block Failed {res.status_code}: {res.text}"
+            except Exception as e:
+                return f"Block Error: {e}"
+
+        return super().execute_command(command_key, payload)
 
 def get_agent():
     system = platform.system()
@@ -151,9 +170,10 @@ def connect():
 @sio.on('execute_command')
 def on_execute_command(data):
     command_key = data.get('command')
+    payload = data.get('payload')
     dashboard_id = data.get('id')
     logger.info(f"Executing: {command_key}")
-    output = agent.execute_command(command_key)
+    output = agent.execute_command(command_key, payload)
     sio.emit('command_result', {'dashboardId': dashboard_id, 'result': {'output': output}})
 
 # --- MAIN LOOP WITH OFFLINE QUEUE ---
