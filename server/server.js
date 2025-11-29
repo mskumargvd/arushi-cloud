@@ -272,7 +272,9 @@ async function sendAlert(agentId, type) {
 
     // 1. Configure the "Sender" (Rajesh)
     const transporter = nodemailer.createTransport({
-        service: 'gmail',
+        host: 'smtp.gmail.com', // Explicit host
+        port: 465,              // Explicit SSL port
+        secure: true,           // true for 465, false for other ports
         auth: {
             user: process.env.EMAIL_USER, // rajesh.rv.varma@gmail.com
             pass: process.env.EMAIL_PASS  // The App Password
