@@ -248,6 +248,18 @@ async function startServer() {
     try {
         await prisma.$connect();
         console.log('Connected to Database (SQLite)');
+
+        // Restore agents from DB
+        const savedAgents = await prisma.agent.findMany();
+        savedAgents.forEach(agent => {
+            agents.set(agent.id, {
+                ...agent,
+                status: 'offline', // Assume offline until they reconnect
+                socketId: null
+            });
+        });
+        console.log(`Restored ${savedAgents.length} agents from DB`);
+
         // await redisClient.connect(); // TODO: Enable when Redis is ready
         server.listen(PORT, () => {
             console.log(`Server listening on *:${PORT}`);

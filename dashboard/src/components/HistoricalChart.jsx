@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-export default function HistoricalChart({ agentId }) {
+export default function HistoricalChart({ agentId, liveStats }) {
     const [data, setData] = useState([]);
 
+    // Initial Load
     useEffect(() => {
         const fetchData = async () => {
             try {
@@ -21,10 +22,23 @@ export default function HistoricalChart({ agentId }) {
         };
 
         fetchData();
-        // Refresh every 10 seconds
-        const interval = setInterval(fetchData, 10000);
-        return () => clearInterval(interval);
     }, [agentId]);
+
+    // Real-time Update
+    useEffect(() => {
+        if (liveStats) {
+            setData(prev => {
+                const newPoint = {
+                    ...liveStats,
+                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                };
+                // Keep only last 50 points
+                const newData = [...prev, newPoint];
+                if (newData.length > 50) newData.shift();
+                return newData;
+            });
+        }
+    }, [liveStats]);
 
     if (data.length === 0) return <div className="text-gray-500 text-sm">Loading history...</div>;
 

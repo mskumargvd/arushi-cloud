@@ -46,8 +46,51 @@ class BaseAgent:
         except Exception as e:
             return f"Execution Error: {e}"
 
+    def self_update(self):
+        """Downloads the latest agent script and restarts."""
+        try:
+            import requests
+            import sys
+            
+            logger.info("Checking for updates...")
+            # In a real scenario, we would check version first.
+            # Here we force download for demo.
+            url = f"{SERVER_URL}/download/agent"
+            response = requests.get(url)
+            
+            if response.status_code == 200:
+                logger.info("Downloading new agent...")
+                current_file = os.path.abspath(__file__)
+                
+                # Backup current file
+                backup_file = current_file + ".bak"
+                try:
+                    os.rename(current_file, backup_file)
+                except OSError:
+                    pass # Maybe file is locked or permission issue, proceed with caution
+                
+                # Write new file
+                with open(current_file, 'wb') as f:
+                    f.write(response.content)
+                    
+                logger.info("Update successful! Restarting...")
+                
+                # Restart the process
+                os.execv(sys.executable, ['python'] + sys.argv)
+            else:
+                return f"Update failed: Server returned {response.status_code}"
+                
+        except Exception as e:
+            logger.error(f"Update error: {e}")
+            # Try to restore backup if exists
+            if os.path.exists(backup_file):
+                os.rename(backup_file, current_file)
+            return f"Update failed: {e}"
+
     def execute_command(self, command_key):
         """Base method to be overridden."""
+        if command_key == 'self_update':
+            return self.self_update()
         return "Command not implemented"
 
 class WindowsAgent(BaseAgent):
@@ -64,7 +107,7 @@ class WindowsAgent(BaseAgent):
             return "Checking Windows Update status...\n(Note: Full update requires Admin rights)\n"
         elif command_key == 'uptime':
             return self._run_safe(['powershell', '-Command', '(Get-CimInstance Win32_OperatingSystem).LastBootUpTime'])
-        return f"Unknown command: {command_key}"
+        return super().execute_command(command_key)
 
 class LinuxAgent(BaseAgent):
     def __init__(self):
@@ -80,7 +123,7 @@ class LinuxAgent(BaseAgent):
             return self._run_safe(['apt', 'update']) # Default to apt for now
         elif command_key == 'uptime':
             return self._run_safe(['uptime'])
-        return f"Unknown command: {command_key}"
+        return super().execute_command(command_key)
 
 class OPNsenseAgent(LinuxAgent):
     def __init__(self):

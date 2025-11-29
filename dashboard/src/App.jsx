@@ -130,8 +130,8 @@ function App() {
                       exit={{ opacity: 0, scale: 0.95 }}
                       onClick={() => setSelectedAgent(agent)}
                       className={`p-4 rounded-xl border cursor-pointer transition-all duration-200 group relative overflow-hidden ${selectedAgent?.id === agent.id
-                          ? 'bg-blue-600/10 border-blue-500/50 shadow-lg shadow-blue-500/10'
-                          : 'bg-[#1e293b]/50 border-slate-700/50 hover:border-slate-600 hover:bg-[#1e293b]'
+                        ? 'bg-blue-600/10 border-blue-500/50 shadow-lg shadow-blue-500/10'
+                        : 'bg-[#1e293b]/50 border-slate-700/50 hover:border-slate-600 hover:bg-[#1e293b]'
                         } ${agent.status === 'offline' ? 'opacity-60 grayscale' : ''}`}
                     >
                       <div className="flex justify-between items-start mb-2">
@@ -182,7 +182,7 @@ function App() {
                   {/* Charts & Command Center Split */}
                   <div className="grid grid-cols-1 gap-6 flex-1 min-h-0">
                     <div className="bg-[#1e293b]/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-1 overflow-hidden flex flex-col">
-                      <HistoricalChart agentId={selectedAgent.id} />
+                      <HistoricalChart agentId={selectedAgent.id} liveStats={selectedAgent.stats} />
                     </div>
 
                     <div className="bg-[#1e293b]/50 backdrop-blur-sm border border-slate-700/50 rounded-xl overflow-hidden flex flex-col flex-1 min-h-0">
