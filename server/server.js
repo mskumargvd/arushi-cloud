@@ -274,7 +274,7 @@ async function sendAlert(agentId, type) {
     try {
         const data = await resend.emails.send({
             from: 'Arushi Cloud <onboarding@resend.dev>', // Use their test domain for now
-            to: 'santosh.m@agnidhra-technologies.com', // YOUR email
+            to: 'santosh.modekurty@gmail.com', // YOUR email
             subject: `[CRITICAL] Agent ${agentId} is ${type.toUpperCase()}`,
             html: `<p>Agent <strong>${agentId}</strong> is <strong>${type}</strong> at ${timestamp}</p>`
         });
