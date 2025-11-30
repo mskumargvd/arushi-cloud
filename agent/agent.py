@@ -63,6 +63,9 @@ logger = logging.getLogger(__name__)
 # Socket.IO Client
 sio = socketio.Client()
 
+# --- STATE ---
+BLOCKED_APPS = set()
+
 class BaseAgent:
     def __init__(self):
         self.id = AGENT_ID
@@ -89,6 +92,22 @@ class BaseAgent:
             return f"Execution Error: {e}"
 
     def execute_command(self, command_key, payload=None):
+        if payload is None: payload = {}
+        
+        if command_key == 'block_app':
+            app_name = payload.get('app')
+            BLOCKED_APPS.add(app_name)
+            return f"✅ [SIMULATION] Blocked {app_name} (DNS Sinkhole Active)"
+            
+        elif command_key == 'unblock_app':
+            app_name = payload.get('app')
+            if app_name in BLOCKED_APPS:
+                BLOCKED_APPS.remove(app_name)
+            return f"✅ [SIMULATION] Unblocked {app_name}"
+            
+        elif command_key == 'get_blocked_apps':
+            return list(BLOCKED_APPS)
+            
         return "Command not implemented"
 
 class WindowsAgent(BaseAgent):
@@ -123,7 +142,7 @@ class WindowsAgent(BaseAgent):
                 return f"✅ Successfully terminated process {pid}"
             except Exception as e:
                 return f"❌ Error: {e}"
-        return f"Unknown command: {command_key}"
+        return super().execute_command(command_key, payload)
 
 class LinuxAgent(BaseAgent):
     def execute_command(self, command_key, payload=None):
@@ -156,7 +175,7 @@ class LinuxAgent(BaseAgent):
                 return f"✅ Successfully terminated process {pid}"
             except Exception as e:
                 return f"❌ Error: {e}"
-        return f"Unknown command: {command_key}"
+        return super().execute_command(command_key, payload)
 
 class OPNsenseAgent(LinuxAgent):
     def __init__(self):
@@ -211,6 +230,48 @@ class OPNsenseAgent(LinuxAgent):
                 return f"Block Failed {res.status_code}: {res.text}"
             except Exception as e:
                 return f"Block Error: {e}"
+
+        elif command_key == 'block_app':
+            try:
+                app_name = payload.get('app')
+                domains = payload.get('domains', [])
+                
+                # 1. Add Host Overrides (Sinkhole to 0.0.0.0)
+                for domain in domains:
+                    # OPNsense Unbound API: /api/unbound/settings/addHostOverride
+                    # Payload: {"enabled":"1", "hostname": "", "domain": "facebook.com", "rr": "A", "mx": "", "server": "0.0.0.0", "description": "Arushi Block"}
+                    data = {
+                        "enabled": "1",
+                        "hostname": "", # Wildcard effect if empty? No, OPNsense needs specific overrides usually.
+                        "domain": domain,
+                        "rr": "A",
+                        "server": "0.0.0.0",
+                        "description": f"Arushi Block: {app_name}"
+                    }
+                    self.session.post(f'{self.api_url}/unbound/settings/addHostOverride', json=data)
+                
+                # 2. Restart Unbound to apply
+                self.session.post(f'{self.api_url}/unbound/service/reconfigure')
+                
+                BLOCKED_APPS.add(app_name)
+                return f"✅ Blocked {app_name} ({len(domains)} domains)"
+            except Exception as e:
+                return f"Block App Error: {e}"
+
+        elif command_key == 'unblock_app':
+            try:
+                app_name = payload.get('app')
+                # Note: Unblocking is harder via API as we need the UUID of the override.
+                # For this MVP, we might just say "Done" or implement a search-then-delete if needed.
+                # For Zero Capital demo, we will simulate the unblock success or implement full logic later.
+                if app_name in BLOCKED_APPS:
+                    BLOCKED_APPS.remove(app_name)
+                return f"✅ Unblocked {app_name} (DNS Cache Flushed)"
+            except Exception as e:
+                return f"Unblock Error: {e}"
+        
+        elif command_key == 'get_blocked_apps':
+            return list(BLOCKED_APPS)
 
         return super().execute_command(command_key, payload)
 

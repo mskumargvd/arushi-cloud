@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import io from 'socket.io-client';
-import { Terminal, Activity, Server, Shield, Cpu, HardDrive, Clock, ChevronRight, Command, LayoutDashboard, Settings, Bell, Search, Lock, LogOut, Plus, AlertOctagon } from 'lucide-react';
+import { Terminal, Activity, Server, Shield, Cpu, HardDrive, Clock, ChevronRight, Command, LayoutDashboard, Settings, Bell, Search, Lock, LogOut, Plus, AlertOctagon, Grid } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import HistoricalChart from './components/HistoricalChart'; // Ensure you have this file
 import CommandCenter from './components/CommandCenter'; // Ensure you have this file
@@ -14,6 +14,7 @@ import Backups from './components/Backups';
 import LiveLogs from './components/LiveLogs';
 import ProcessManager from './components/ProcessManager';
 import ThreatMap from './components/ThreatMap';
+import AppControl from './components/AppControl';
 
 // --- CONFIG ---
 // YOUR RENDER URL GOES HERE
@@ -223,6 +224,12 @@ function App() {
             onClick={() => setCurrentView('threats')}
           />
           <SidebarItem
+            icon={<Grid size={18} />}
+            label="App Control"
+            active={currentView === 'apps'}
+            onClick={() => setCurrentView('apps')}
+          />
+          <SidebarItem
             icon={<Settings size={18} />}
             label="Settings"
             active={currentView === 'settings'}
@@ -281,6 +288,16 @@ function App() {
             <SettingsView />
           ) : currentView === 'threats' ? (
             <ThreatMap socket={socket} />
+          ) : currentView === 'apps' ? (
+            <div className="p-4">
+              {/* Show App Control for the first connected agent (or selected one if we had a global selector) */}
+              {/* For now, we'll just use the first agent or show a placeholder */}
+              {agents.length > 0 ? (
+                <AppControl agentId={agents[0].id} socket={socket} />
+              ) : (
+                <div className="text-center text-slate-500 mt-20">No agents connected</div>
+              )}
+            </div>
           ) : (
             <AnimatePresence mode="wait">
               {!selectedAgent ? (
