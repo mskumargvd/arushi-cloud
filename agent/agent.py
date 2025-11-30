@@ -9,6 +9,8 @@ import os
 import json
 import requests
 import urllib3
+import threading
+import random
 
 # Disable warnings for self-signed certificates (OPNsense Localhost)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -235,9 +237,64 @@ def on_execute_command(data):
     output = agent.execute_command(command_key, payload)
     sio.emit('command_result', {'dashboardId': dashboard_id, 'result': {'output': output}})
 
+# --- THREAT MONITORING (SURICATA / SIMULATION) ---
+def monitor_threats():
+    log_file = '/var/log/suricata/eve.json'
+    
+    # SIMULATION MODE (If file doesn't exist)
+    if not os.path.exists(log_file):
+        logger.warning(f"⚠️ Suricata Log not found at {log_file}. Starting SIMULATION MODE.")
+        while True:
+            if sio.connected:
+                # Generate Fake Threat
+                threat = {
+                    'src_ip': f"{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}",
+                    'dest_ip': "192.168.1.1",
+                    'proto': random.choice(['TCP', 'UDP', 'ICMP']),
+                    'signature': random.choice([
+                        "ET SCAN Potential SSH Scan",
+                        "ET MALWARE Botnet C2 Traffic",
+                        "ET EXPLOIT Apache Log4j RCE Attempt",
+                        "ET WEB_SERVER SQL Injection Attempt"
+                    ]),
+                    'severity': random.randint(1, 3)
+                }
+                sio.emit('threat_alert', threat)
+                logger.info(f"🔥 Simulated Threat Sent: {threat['signature']}")
+            
+            time.sleep(random.randint(2, 8))
+    
+    # REAL MODE (Tail the file)
+    else:
+        logger.info(f"🛡️ Monitoring Suricata Log: {log_file}")
+        f = subprocess.Popen(['tail', '-F', log_file], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        while True:
+            line = f.stdout.readline()
+            if line:
+                try:
+                    data = json.loads(line)
+                    if data.get('event_type') == 'alert':
+                        alert = data.get('alert', {})
+                        threat = {
+                            'src_ip': data.get('src_ip'),
+                            'dest_ip': data.get('dest_ip'),
+                            'proto': data.get('proto'),
+                            'signature': alert.get('signature'),
+                            'severity': alert.get('severity')
+                        }
+                        if sio.connected:
+                            sio.emit('threat_alert', threat)
+                except Exception as e:
+                    pass
+
 # --- MAIN LOOP WITH OFFLINE QUEUE ---
 def main():
     logger.info(f"Starting Arushi Cloud Agent (ID: {AGENT_ID[:8]}...)")
+    
+    # Start Threat Monitor in Background
+    t = threading.Thread(target=monitor_threats, daemon=True)
+    t.start()
+    
     psutil.cpu_percent(interval=None) # Init CPU
     
     msg_queue = [] # The Offline Buffer

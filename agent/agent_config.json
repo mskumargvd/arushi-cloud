@@ -1,1 +1,5 @@
-{"server_url": "https://arushi-cloud-server-v1.onrender.com", "api_key": "my_super_secret_key_12345", "agent_id": "c3e73364-189f-4577-948e-d6610405a02e"}
+{
+    "server_url": "https://arushi-cloud-server-v1.onrender.com",
+    "api_key": "my_super_secret_key_12345",
+    "agent_id": "c3e73364-189f-4577-948e-d6610405a02e"
+}

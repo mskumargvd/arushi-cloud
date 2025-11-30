@@ -234,6 +234,18 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Threat Alert: Agent -> Server -> Dashboard
+    socket.on('threat_alert', (data) => {
+        // data = { src_ip, dest_ip, proto, signature, severity }
+        // Broadcast to all dashboards
+        io.to('dashboard').emit('threat_update', data);
+
+        // Optional: Log high severity threats
+        if (data.severity <= 1) {
+            createLog(socket.data.agentId, 'alert', `High Severity Threat: ${data.signature} from ${data.src_ip}`, 'error');
+        }
+    });
+
     socket.on('disconnect', () => {
         if (socket.data.type === 'agent') {
             const agentId = socket.data.agentId;

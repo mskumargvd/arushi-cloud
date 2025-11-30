@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import io from 'socket.io-client';
-import { Terminal, Activity, Server, Shield, Cpu, HardDrive, Clock, ChevronRight, Command, LayoutDashboard, Settings, Bell, Search, Lock, LogOut, Plus } from 'lucide-react';
+import { Terminal, Activity, Server, Shield, Cpu, HardDrive, Clock, ChevronRight, Command, LayoutDashboard, Settings, Bell, Search, Lock, LogOut, Plus, AlertOctagon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import HistoricalChart from './components/HistoricalChart'; // Ensure you have this file
 import CommandCenter from './components/CommandCenter'; // Ensure you have this file
@@ -13,6 +13,7 @@ import FirewallControls from './components/FirewallControls';
 import Backups from './components/Backups';
 import LiveLogs from './components/LiveLogs';
 import ProcessManager from './components/ProcessManager';
+import ThreatMap from './components/ThreatMap';
 
 // --- CONFIG ---
 // YOUR RENDER URL GOES HERE
@@ -216,6 +217,12 @@ function App() {
             onClick={() => setCurrentView('logs')}
           />
           <SidebarItem
+            icon={<AlertOctagon size={18} />}
+            label="Threat Map"
+            active={currentView === 'threats'}
+            onClick={() => setCurrentView('threats')}
+          />
+          <SidebarItem
             icon={<Settings size={18} />}
             label="Settings"
             active={currentView === 'settings'}
@@ -272,6 +279,8 @@ function App() {
             <ActivityLogs />
           ) : currentView === 'settings' ? (
             <SettingsView />
+          ) : currentView === 'threats' ? (
+            <ThreatMap socket={socket} />
           ) : (
             <AnimatePresence mode="wait">
               {!selectedAgent ? (
