@@ -159,6 +159,28 @@ io.on('connection', (socket) => {
         io.to('dashboard').emit('agent_connected', { id: data.id, ...data });
     });
 
+    // --- THREAT INTELLIGENCE RELAY ---
+    socket.on('threat_alert', (data) => {
+        const agentId = socket.data.agentId;
+
+        // Add context and broadcast to dashboard
+        const enrichedThreat = {
+            ...data,
+            id: Math.random().toString(36).substr(2, 9), // temp ID for frontend keys
+            agentId: agentId,
+            timestamp: new Date().toISOString()
+        };
+
+        // Send to all dashboards
+        io.to('dashboard').emit('threat_update', enrichedThreat);
+
+        // Optional: Log high severity threats to DB
+        if (data.severity <= 2) { // Severity 1 & 2 are usually high/critical
+            createLog(agentId, 'alert', `Threat Detected: ${data.signature}`, 'error');
+        }
+    });
+
+    // --- DASHBOARD ---
     socket.on('register_dashboard', () => {
         console.log('Dashboard connected');
         socket.join('dashboard');
