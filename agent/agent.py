@@ -355,25 +355,6 @@ def monitor_threats():
         except Exception as e:
             logger.error(f"Threat Monitor Failed: {e}")
 
-    # If file missing (Windows/Dev), use Simulation
-    else:
-        logger.warning("⚠️ Suricata logs not found. Starting SIMULATION mode.")
-        while True:
-            if sio.connected:
-                threat = {
-                    'src_ip': f"{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}",
-                    'dest_ip': "192.168.1.1",
-                    'proto': random.choice(['TCP', 'UDP', 'ICMP']),
-                    'signature': random.choice([
-                        "ET SCAN Potential SSH Scan",
-                        "ET MALWARE Botnet C2 Traffic",
-                        "ET EXPLOIT Apache Log4j RCE Attempt"
-                    ]),
-                    'severity': random.randint(1, 3)
-                }
-                sio.emit('threat_alert', threat)
-            time.sleep(random.randint(5, 15))
-
 def main():
     logger.info(f"Starting Arushi Cloud Agent (ID: {AGENT_ID[:8]}...)")
     
