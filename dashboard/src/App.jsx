@@ -35,6 +35,7 @@ function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [currentView, setCurrentView] = useState('overview'); // 'overview', 'agents', 'logs', 'settings'
   const [showAddDevice, setShowAddDevice] = useState(false);
+  const [globalBlockedApps, setGlobalBlockedApps] = useState({});
 
   // --- 1. LOGIN & SOCKET SETUP ---
   useEffect(() => {
@@ -293,7 +294,13 @@ function App() {
               {/* Show App Control for the first connected agent (or selected one if we had a global selector) */}
               {/* For now, we'll just use the first agent or show a placeholder */}
               {agents.length > 0 ? (
-                <AppControl agentId={agents[0].id} socket={socket} />
+                <AppControl
+                  agentId={agents[0]?.id}
+                  socket={socket}
+                  // Pass the state down
+                  blockedApps={globalBlockedApps}
+                  setBlockedApps={setGlobalBlockedApps}
+                />
               ) : (
                 <div className="text-center text-slate-500 mt-20">No agents connected</div>
               )}

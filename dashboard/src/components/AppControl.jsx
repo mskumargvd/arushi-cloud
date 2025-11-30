@@ -12,8 +12,7 @@ const APPS = [
     { id: 'reddit', name: 'Reddit', icon: <MessageSquare className="w-6 h-6 text-orange-500" />, domains: ['reddit.com', 'redd.it'] },
 ];
 
-const AppControl = ({ agentId, socket }) => {
-    const [blockedApps, setBlockedApps] = useState({}); // { 'facebook': true, ... }
+const AppControl = ({ agentId, socket, blockedApps, setBlockedApps }) => {
     const [loading, setLoading] = useState({}); // { 'facebook': true }
 
     // Fetch initial state
